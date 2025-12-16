@@ -20,7 +20,7 @@ tpR = input.float(1.2, "Take Profit (R multiple)", minval=0.0, tooltip="TP = ent
 moveStopToBEAt1R = input.bool(true, "Move stop to breakeven after 1R", tooltip="Once price touches +1R (long) or -1R (short), stop is moved to entry price.")
 
 avoidLateCandles = input.bool(false, "Avoid late candles (13:00 & 17:00 opens)", tooltip="Skips signals on bars whose start time is 13:00 or 17:00 in the selected timezone (designed for 4H).")
-sessionTz = input.string(syminfo.timezone, "Timezone for late-candle filter")
+sessionTz = input.string("Exchange", "Timezone for late-candle filter", tooltip="Default is 'Exchange' (symbol's exchange timezone). TradingView requires this default to be a constant.")
 enforce4h = input.bool(false, "Enforce 4H timeframe only")
 
 // --------------------

@@ -2,38 +2,90 @@
 // © mrussel
 
 //@version=5
-indicator("ATR Distance Trade Filter (Text Only)", overlay=true)
+strategy("4H Bullish Sweep + Strong Close (ATR Distance Filter)", overlay=true, pyramiding=0, process_orders_on_close=true, initial_capital=10000)
 
-// — Inputs
+// --------------------
+// Inputs
+// --------------------
 smalen = input.int(35, "SMA Length", minval=1)
 atrlen = input.int(5, "ATR Length", minval=1)
-maxATR = input.float(1.0, "Max ATR Distance To Trade", minval=0.0)
 
-// — Calculations
-smaVal = ta.sma(close, smalen)
-atrVal = ta.atr(atrlen)
+stageAtrMult = input.float(5.0, "Stage: max distance (ATR multiples)", minval=0.0)
+strongClosePct = input.float(0.65, "Signal: close >= % of range from low", minval=0.0, maxval=1.0)
 
-// Absolute ATR distance (guard against 0 ATR)
-atrDistance = atrVal != 0.0 ? math.abs(close - smaVal) / atrVal : na
+// Backtest practicality (not specified by rules, but needed)
+useAtrStops = input.bool(true, "Use ATR stop/target")
+stopAtr = input.float(2.0, "Stop Loss (ATR)", minval=0.0)
+takeAtr = input.float(4.0, "Take Profit (ATR)", minval=0.0)
+exitOnCloseBelowSma = input.bool(true, "Exit if close falls below SMA")
 
-// Trade permission
-canTrade = not na(atrDistance) and atrDistance <= maxATR
+// --------------------
+// Indicators
+// --------------------
+sma35 = ta.sma(close, smalen)
+atr5 = ta.atr(atrlen)
 
-// — Label (latest bar only)
-var label atrLabel = na
+// --------------------
+// Rules
+// --------------------
+// Direction
+bullish = close > sma35
 
+// Stage: distance between Low and SMA less than 5*ATR (configurable)
+stage = not na(atr5) and atr5 != 0.0 and math.abs(low - sma35) <= stageAtrMult * atr5
+
+// Signal candle sweeps previous candle (bullish interpretation = takes prior low)
+sweepPrev = low < low[1]
+
+// Signal candle closes strong: close should be >= 65% of range above low
+rng = high - low
+strongClose = rng > 0 ? ((close - low) / rng) >= strongClosePct : false
+
+signal = bullish and stage and sweepPrev and strongClose
+
+// --------------------
+// Entry: limit buy at (or below) next candle open, valid only for that next candle
+// --------------------
+var bool pendingLong = false
+var int pendingFromBar = na
+
+if barstate.isconfirmed
+    // If a signal happened on the just-closed bar, arm a one-bar entry for the next bar
+    if signal and strategy.position_size == 0
+        pendingLong := true
+
+// On the next bar after signal, submit limit at this bar's open
+if pendingLong
+    strategy.entry("L", strategy.long, limit=open)
+    pendingFromBar := bar_index
+    pendingLong := false
+
+// Cancel if not filled by end of that bar (i.e., once we move to the following bar)
+if not na(pendingFromBar) and bar_index > pendingFromBar and strategy.position_size == 0
+    strategy.cancel("L")
+    pendingFromBar := na
+
+// --------------------
+// Exits (for backtesting)
+// --------------------
+if exitOnCloseBelowSma and strategy.position_size > 0 and close < sma35
+    strategy.close("L", comment="Close<SMA")
+
+if useAtrStops and strategy.position_size > 0
+    longStop = strategy.position_avg_price - stopAtr * atr5
+    longTake = strategy.position_avg_price + takeAtr * atr5
+    strategy.exit("L-X", from_entry="L", stop=(stopAtr > 0 ? longStop : na), limit=(takeAtr > 0 ? longTake : na))
+
+// --------------------
+// Visuals
+// --------------------
+plot(sma35, "SMA", color=color.yellow)
+plotshape(signal, title="Signal candle", style=shape.triangleup, location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="SIG")
+
+// Optional warning if not on 4H
+var label tfWarn = na
 if barstate.islast
-    if not na(atrLabel)
-        label.delete(atrLabel)
-
-    atrLabel := label.new(
-         x=bar_index,
-         y=close,
-         text=str.tostring(atrDistance, "#.##") + " ATR from " + str.tostring(smalen) + " SMA",
-         xloc=xloc.bar_index,
-         yloc=yloc.price,
-         style=label.style_label_left,
-         color=canTrade ? color.new(color.green, 0) : color.new(color.red, 0),
-         textcolor=color.white,
-         size=size.normal
-     )
+    if not na(tfWarn)
+        label.delete(tfWarn)
+    if timeframe.period != "240"
+        tfWarn := label.new(bar_index, high, "Designed for 4H (240). Current: " + timeframe.period, style=label.style_label_down, textcolor=color.white, color=color.new(color.orange, 0))

@@ -1,1 +1,39 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © mrussel
 
+//@version=5
+indicator("ATR Distance Trade Filter (Text Only)", overlay=true)
+
+// — Inputs
+smalen = input.int(35, "SMA Length", minval=1)
+atrlen = input.int(5, "ATR Length", minval=1)
+maxATR = input.float(1.0, "Max ATR Distance To Trade", minval=0.0)
+
+// — Calculations
+smaVal = ta.sma(close, smalen)
+atrVal = ta.atr(atrlen)
+
+// Absolute ATR distance (guard against 0 ATR)
+atrDistance = atrVal != 0.0 ? math.abs(close - smaVal) / atrVal : na
+
+// Trade permission
+canTrade = not na(atrDistance) and atrDistance <= maxATR
+
+// — Label (latest bar only)
+var label atrLabel = na
+
+if barstate.islast
+    if not na(atrLabel)
+        label.delete(atrLabel)
+
+    atrLabel := label.new(
+         x=bar_index,
+         y=close,
+         text=str.tostring(atrDistance, "#.##") + " ATR from " + str.tostring(smalen) + " SMA",
+         xloc=xloc.bar_index,
+         yloc=yloc.price,
+         style=label.style_label_left,
+         color=canTrade ? color.new(color.green, 0) : color.new(color.red, 0),
+         textcolor=color.white,
+         size=size.normal
+     )

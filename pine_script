@@ -1,6 +1,5 @@
 // This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © mrussel
-
 //@version=5
 strategy("4H Sweep + Strong Close (ATR Distance Filter)", overlay=true, pyramiding=0, process_orders_on_close=false, calc_on_order_fills=true, initial_capital=10000)
 
@@ -11,16 +10,21 @@ smalen = input.int(35, "SMA Length", minval=1)
 atrlen = input.int(5, "ATR Length", minval=1)
 
 stageAtrMult = input.float(5.0, "Stage: max distance (ATR multiples)", minval=0.0)
-strongClosePct = input.float(0.65, "Signal: strong close threshold", minval=0.0, maxval=1.0, tooltip="Bullish: (close-low)/(high-low) >= threshold. Bearish: (high-close)/(high-low) >= threshold.")
+strongClosePct = input.float(0.65, "Strong close threshold", minval=0.0, maxval=1.0, tooltip="Bullish: (close-low)/(high-low) >= threshold. Bearish: (high-close)/(high-low) >= threshold.")
 
 enableLong = input.bool(true, "Enable longs")
 enableShort = input.bool(true, "Enable shorts")
 
 tpR = input.float(1.2, "Take Profit (R multiple)", minval=0.0, tooltip="TP = entry +/- (R multiple)*R, where R = |entry - stop|")
-moveStopToBEAt1R = input.bool(true, "Move stop to breakeven after 1R", tooltip="Once price touches +1R (long) or -1R (short), stop is moved to entry price.")
+moveStopToBEAt1R = input.bool(true, "Move stop to breakeven after 1R")
 
-avoidLateCandles = input.bool(false, "Avoid late candles (13:00 & 17:00 opens)", tooltip="Skips signals on bars whose start time is 13:00 or 17:00 in the selected timezone (designed for 4H).")
-sessionTz = input.string("Exchange", "Timezone for late-candle filter", tooltip="Default is 'Exchange' (symbol's exchange timezone). TradingView requires this default to be a constant.")
+avoidLateCandles = input.bool(false, "Avoid late 4H candles (13:00-17:00 & 17:00-21:00)")
+sessionTz = input.string("Exchange", "Timezone for late-candle filter", tooltip="Use 'Exchange' to use the symbol's exchange timezone. Defaults must be constant strings.")
+avoidStart1 = input.int(13, "Avoid window 1 start hour", minval=0, maxval=23)
+avoidEnd1 = input.int(17, "Avoid window 1 end hour", minval=0, maxval=24)
+avoidStart2 = input.int(17, "Avoid window 2 start hour", minval=0, maxval=23)
+avoidEnd2 = input.int(21, "Avoid window 2 end hour", minval=0, maxval=24)
+
 enforce4h = input.bool(false, "Enforce 4H timeframe only")
 
 // --------------------
@@ -36,24 +40,20 @@ is4h = timeframe.period == "240"
 allowedTf = not enforce4h or is4h
 
 barHour = hour(time, sessionTz)
-isLate4hOpen = (barHour == 13) or (barHour == 17)
-allowedTime = not avoidLateCandles or not isLate4hOpen
+inAvoidWindow1 = barHour >= avoidStart1 and barHour < avoidEnd1
+inAvoidWindow2 = barHour >= avoidStart2 and barHour < avoidEnd2
+allowedTime = not avoidLateCandles or not (inAvoidWindow1 or inAvoidWindow2)
 
-rng = high - low
-
-// Direction
 bullish = close > sma35
 bearish = close < sma35
 
-// Stage
 stageBull = not na(atr5) and atr5 != 0.0 and math.abs(low - sma35) <= stageAtrMult * atr5
 stageBear = not na(atr5) and atr5 != 0.0 and math.abs(high - sma35) <= stageAtrMult * atr5
 
-// Sweep
 sweepLow = low < low[1]
 sweepHigh = high > high[1]
 
-// Strong close
+rng = high - low
 strongCloseBull = rng > 0 ? ((close - low) / rng) >= strongClosePct : false
 strongCloseBear = rng > 0 ? ((high - close) / rng) >= strongClosePct : false
 
@@ -61,56 +61,25 @@ longSignal = enableLong and allowedTf and allowedTime and bullish and stageBull 
 shortSignal = enableShort and allowedTf and allowedTime and bearish and stageBear and sweepHigh and strongCloseBear
 
 // --------------------
-// Entry: next candle only, at/better than that candle open
+// Entry (fills next bar open in backtest)
+// Also latch the signal candle stop level so SL is signal candle Low/High.
 // --------------------
-var int setupBarIndex = na
-var int setupDir = 0               // 1 = long, -1 = short
-var float setupStopBase = na       // long: signal candle low, short: signal candle high
+var float pendingStopBase = na
+var int pendingDir = 0 // 1=long, -1=short
 
-var int orderBarIndex = na
-var int orderDir = 0
-var float orderStopBase = na
-
-// Arm setup on the close of the signal candle (historical bars are confirmed by default)
 if barstate.isconfirmed and strategy.position_size == 0
     if longSignal
-        setupBarIndex := bar_index
-        setupDir := 1
-        setupStopBase := low
+        pendingDir := 1
+        pendingStopBase := low
+        strategy.entry("L", strategy.long)
     else if shortSignal
-        setupBarIndex := bar_index
-        setupDir := -1
-        setupStopBase := high
-
-// Place the entry on the very next bar only
-if not na(setupBarIndex) and bar_index == setupBarIndex + 1 and strategy.position_size == 0
-    if setupDir == 1
-        // Long: enter at or below this bar's open
-        strategy.entry("L", strategy.long, limit=open)
-    else if setupDir == -1
-        // Short: enter at or above this bar's open
-        strategy.entry("S", strategy.short, limit=open)
-
-    orderBarIndex := bar_index
-    orderDir := setupDir
-    orderStopBase := setupStopBase
-
-    // Clear setup so it doesn't repeat
-    setupBarIndex := na
-    setupDir := 0
-    setupStopBase := na
-
-// Cancel if not filled by end of that entry bar (i.e., once we move to the following bar)
-if not na(orderBarIndex) and bar_index > orderBarIndex and strategy.position_size == 0
-    strategy.cancel("L")
-    strategy.cancel("S")
-    orderBarIndex := na
-    orderDir := 0
-    orderStopBase := na
+        pendingDir := -1
+        pendingStopBase := high
+        strategy.entry("S", strategy.short)
 
 // --------------------
 // Risk management
-// - Stop Loss at signal candle High/Low
+// - Stop Loss at signal candle Low/High
 // - TP at 1.2R
 // - Move stop to breakeven once 1R is touched
 // --------------------
@@ -118,46 +87,34 @@ var float tradeStopBase = na
 var int tradeDir = 0
 var bool movedToBE = false
 
-// Detect new position and latch the stop base from the last order
-newLong = (strategy.position_size > 0) and (strategy.position_size[1] == 0)
-newShort = (strategy.position_size < 0) and (strategy.position_size[1] == 0)
-flatNow = (strategy.position_size == 0)
+newLong = strategy.position_size > 0 and strategy.position_size[1] == 0
+newShort = strategy.position_size < 0 and strategy.position_size[1] == 0
+flatNow = strategy.position_size == 0
 
 if flatNow and strategy.position_size[1] != 0
-    // Position closed; reset trade state
     tradeStopBase := na
     tradeDir := 0
     movedToBE := false
 
 if newLong
     tradeDir := 1
-    tradeStopBase := orderStopBase
+    tradeStopBase := pendingStopBase
     movedToBE := false
-    // clear order latch
-    orderBarIndex := na
-    orderDir := 0
-    orderStopBase := na
+    pendingStopBase := na
+    pendingDir := 0
 
 if newShort
     tradeDir := -1
-    tradeStopBase := orderStopBase
+    tradeStopBase := pendingStopBase
     movedToBE := false
-    // clear order latch
-    orderBarIndex := na
-    orderDir := 0
-    orderStopBase := na
+    pendingStopBase := na
+    pendingDir := 0
 
-// Compute exits dynamically while in position
 if strategy.position_size != 0 and not na(tradeStopBase)
     entry = strategy.position_avg_price
-
-    // R is distance from entry to initial stop
     r = tradeDir == 1 ? (entry - tradeStopBase) : (tradeStopBase - entry)
-
-    // Guard against invalid/negative R (shouldn't happen, but prevents runtime issues)
     validR = r > 0
 
-    // Determine if 1R has been touched
     touched1R = validR and (
          (tradeDir == 1 and high >= entry + r) or
          (tradeDir == -1 and low <= entry - r)
@@ -169,7 +126,6 @@ if strategy.position_size != 0 and not na(tradeStopBase)
     stopToUse = validR ? (movedToBE ? entry : tradeStopBase) : na
     limitToUse = validR ? (tradeDir == 1 ? entry + tpR * r : entry - tpR * r) : na
 
-    // Use a single exit per direction so it updates each bar
     if tradeDir == 1
         strategy.exit("L-X", from_entry="L", stop=stopToUse, limit=limitToUse)
     else if tradeDir == -1
@@ -178,11 +134,10 @@ if strategy.position_size != 0 and not na(tradeStopBase)
 // --------------------
 // Visuals
 // --------------------
-plot(sma35, "SMA", color=color.yellow)
-plotshape(longSignal, title="Long signal candle", style=shape.triangleup, location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="L")
-plotshape(shortSignal, title="Short signal candle", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="S")
+plot(sma35, "SMA 35", color=color.yellow)
+plotshape(longSignal, title="Long signal", style=shape.triangleup, location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="L")
+plotshape(shortSignal, title="Short signal", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="S")
 
-// Optional warning if not on 4H
 var label tfWarn = na
 if barstate.islast
     if not na(tfWarn)

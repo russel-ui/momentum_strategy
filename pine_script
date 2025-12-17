@@ -1,1 +1,274 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © mrussel
+//@version=6
+strategy("Trend Following Purge & Revert",
+     overlay=true,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=100,
+     initial_capital=100000,
+     commission_type=strategy.commission.percent,
+     commission_value=0.1)
 
+// ═══════════════════════════════════════════════════════════════════
+// INPUT PARAMETERS
+// ═══════════════════════════════════════════════════════════════════
+
+// Strategy Settings
+sma_period = input.int(35, "SMA Period", minval=1)
+sma_150_period = input.int(150, "150 SMA Period (for TP extension)", minval=1)
+atr_period = input.int(5, "ATR Period", minval=1)
+atr_multiplier = input.float(5.0, "ATR Multiplier for Stage Filter", minval=0.1, step=0.1)
+strong_close_pct = input.float(65.0, "Strong Close % (from Low/High)", minval=0, maxval=100, step=1)
+wait_for_next_candle = input.bool(false, "Wait for Next Candle to Enter")
+
+// Candle Size Filter
+min_candle_atr_mult = input.float(0.5, "Min Candle Size (ATR Multiplier)", minval=0.1, step=0.1)
+max_candle_atr_mult = input.float(2.0, "Max Candle Size (ATR Multiplier)", minval=0.1, step=0.1)
+
+// Risk Management
+risk_percent = input.float(1.0, "Risk Per Trade (%)", minval=0.1, step=0.1)
+tp_rr_ratio = input.float(1.2, "Take Profit R:R Ratio (default)", minval=0.1, step=0.1)
+tp_rr_extended = input.float(2.5, "Take Profit R:R (when above/below 150 SMA)", minval=0.1, step=0.1)
+be_rr_ratio = input.float(1.0, "Break Even at R:R", minval=0.1, step=0.1)
+use_trailing = input.bool(true, "Use Trailing to BE")
+
+// Time Filters
+avoid_late_hours = input.bool(false, "Avoid Late Hours (13-21)")
+avoid_start1 = input.int(13, "Avoid Start Hour 1", minval=0, maxval=23)
+avoid_end1 = input.int(17, "Avoid End Hour 1", minval=0, maxval=23)
+avoid_start2 = input.int(17, "Avoid Start Hour 2", minval=0, maxval=23)
+avoid_end2 = input.int(21, "Avoid End Hour 2", minval=0, maxval=23)
+
+// ═══════════════════════════════════════════════════════════════════
+// CALCULATE INDICATORS
+// ═══════════════════════════════════════════════════════════════════
+
+sma_35 = ta.sma(close, sma_period)
+sma_150 = ta.sma(close, sma_150_period)
+atr = ta.atr(atr_period)
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+// Check if current time should be avoided
+is_avoided_time() =>
+    current_hour = hour(time)
+    in_avoid_window1 = current_hour >= avoid_start1 and current_hour < avoid_end1
+    in_avoid_window2 = current_hour >= avoid_start2 and current_hour < avoid_end2
+    avoid_late_hours and (in_avoid_window1 or in_avoid_window2)
+
+// ═══════════════════════════════════════════════════════════════════
+// SIGNAL DETECTION
+// ═══════════════════════════════════════════════════════════════════
+
+// Previous candle values
+prev_high = high[1]
+prev_low = low[1]
+
+// Current completed candle values
+signal_open = open[1]
+signal_high = high[1]
+signal_low = low[1]
+signal_close = close[1]
+
+// Signal candle range (used for both bullish and bearish)
+signal_candle_range = signal_high - signal_low
+
+// CANDLE SIZE FILTER
+// No trade if candle is smaller than min_candle_atr_mult × ATR or larger than max_candle_atr_mult × ATR
+candle_size_valid = signal_candle_range >= (min_candle_atr_mult * atr[1]) and signal_candle_range <= (max_candle_atr_mult * atr[1])
+
+// BULLISH SIGNAL CONDITIONS
+// 1. Direction: Price closes above 35 SMA
+bullish_direction = signal_close > sma_35[1]
+
+// 2. Stage: Distance between Low and SMA < 5*ATR
+distance_to_sma_bull = math.abs(signal_low - sma_35[1])
+bullish_stage = distance_to_sma_bull < (atr_multiplier * atr[1])
+
+// 3. Entry: Signal candle sweeps previous candle Low
+bullish_sweep = signal_low < low[2]
+
+// 4. Strong close: Close should be 65%+ away from Low
+candle_range_bull = signal_high - signal_low
+close_from_low = signal_close - signal_low
+close_pct_bull = candle_range_bull > 0 ? (close_from_low / candle_range_bull * 100.0) : 0
+bullish_strong_close = close_pct_bull >= strong_close_pct
+
+// Combined bullish signal (now includes candle size filter)
+bullish_signal = bullish_direction and bullish_stage and bullish_sweep and bullish_strong_close and candle_size_valid and not is_avoided_time()
+
+// BEARISH SIGNAL CONDITIONS
+// 1. Direction: Price closes below 35 SMA
+bearish_direction = signal_close < sma_35[1]
+
+// 2. Stage: Distance between High and SMA < 5*ATR
+distance_to_sma_bear = math.abs(signal_high - sma_35[1])
+bearish_stage = distance_to_sma_bear < (atr_multiplier * atr[1])
+
+// 3. Entry: Signal candle sweeps previous candle High
+bearish_sweep = signal_high > high[2]
+
+// 4. Strong close: Close should be 65%+ away from High
+candle_range_bear = signal_high - signal_low
+close_from_high = signal_high - signal_close
+close_pct_bear = candle_range_bear > 0 ? (close_from_high / candle_range_bear * 100.0) : 0
+bearish_strong_close = close_pct_bear >= strong_close_pct
+
+// Combined bearish signal (now includes candle size filter)
+bearish_signal = bearish_direction and bearish_stage and bearish_sweep and bearish_strong_close and candle_size_valid and not is_avoided_time()
+
+// ═══════════════════════════════════════════════════════════════════
+// ENTRY LOGIC
+// ═══════════════════════════════════════════════════════════════════
+
+var float signal_low_price = na
+var float signal_high_price = na
+var bool pending_long = false
+var bool pending_short = false
+
+// Store signal for next candle if wait mode is enabled
+if bullish_signal and not wait_for_next_candle
+    signal_low_price := signal_low
+    signal_high_price := signal_high
+   
+if bearish_signal and not wait_for_next_candle
+    signal_low_price := signal_low
+    signal_high_price := signal_high
+
+// Wait for next candle mode
+if bullish_signal and wait_for_next_candle
+    pending_long := true
+    signal_low_price := signal_low
+    signal_high_price := signal_high
+   
+if bearish_signal and wait_for_next_candle
+    pending_short := true
+    signal_low_price := signal_low
+    signal_high_price := signal_high
+
+// Check entry conditions for pending signals
+can_enter_long = pending_long and close <= open
+can_enter_short = pending_short and close >= open
+
+// Clear pending signals if conditions not met
+if pending_long and close > open
+    pending_long := false
+   
+if pending_short and close < open
+    pending_short := false
+
+// ═══════════════════════════════════════════════════════════════════
+// POSITION SIZING & TP/SL CALCULATION
+// ═══════════════════════════════════════════════════════════════════
+
+// Calculate position size based on risk
+calc_position_size(stop_distance) =>
+    risk_amount = strategy.equity * (risk_percent / 100)
+    position_size = risk_amount / stop_distance
+    position_size
+
+// LONG ENTRY
+if (bullish_signal and not wait_for_next_candle) or can_enter_long
+    if strategy.position_size == 0
+        stop_loss = signal_low_price
+        risk_points = close - stop_loss
+       
+        // Check if close is above 150 SMA for extended TP
+        tp_ratio = close > sma_150 ? tp_rr_extended : tp_rr_ratio
+        take_profit = close + (risk_points * tp_ratio)
+       
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Long Exit", "Long", stop=stop_loss, limit=take_profit)
+       
+        // Reset pending signal
+        pending_long := false
+
+// SHORT ENTRY
+if (bearish_signal and not wait_for_next_candle) or can_enter_short
+    if strategy.position_size == 0
+        stop_loss = signal_high_price
+        risk_points = stop_loss - close
+       
+        // Check if close is below 150 SMA for extended TP
+        tp_ratio = close < sma_150 ? tp_rr_extended : tp_rr_ratio
+        take_profit = close - (risk_points * tp_ratio)
+       
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Short Exit", "Short", stop=stop_loss, limit=take_profit)
+       
+        // Reset pending signal
+        pending_short := false
+
+// ═══════════════════════════════════════════════════════════════════
+// TRAILING STOP TO BREAKEVEN
+// ═══════════════════════════════════════════════════════════════════
+
+var float long_entry_price = na
+var float short_entry_price = na
+var float long_sl = na
+var float short_sl = na
+var float long_tp = na
+var float short_tp = na
+var bool long_be_moved = false
+var bool short_be_moved = false
+
+// Store entry prices and exit levels when position opens
+if strategy.position_size > 0 and strategy.position_size[1] == 0
+    long_entry_price := strategy.opentrades.entry_price(0)
+    long_be_moved := false
+
+if strategy.position_size < 0 and strategy.position_size[1] == 0
+    short_entry_price := strategy.opentrades.entry_price(0)
+    short_be_moved := false
+
+// Reset when position closes
+if strategy.position_size == 0
+    long_be_moved := false
+    short_be_moved := false
+
+// Trail to breakeven for long positions
+if use_trailing and strategy.position_size > 0 and not long_be_moved
+    risk_points = long_entry_price - signal_low_price
+    be_threshold = long_entry_price + (risk_points * be_rr_ratio)
+   
+    if close >= be_threshold
+        tp_ratio = close > sma_150 ? tp_rr_extended : tp_rr_ratio
+        long_tp := long_entry_price + (risk_points * tp_ratio)
+        strategy.exit("Long Exit", "Long", stop=long_entry_price, limit=long_tp)
+        long_be_moved := true
+
+// Trail to breakeven for short positions
+if use_trailing and strategy.position_size < 0 and not short_be_moved
+    risk_points = signal_high_price - short_entry_price
+    be_threshold = short_entry_price - (risk_points * be_rr_ratio)
+   
+    if close <= be_threshold
+        tp_ratio = close < sma_150 ? tp_rr_extended : tp_rr_ratio
+        short_tp := short_entry_price - (risk_points * tp_ratio)
+        strategy.exit("Short Exit", "Short", stop=short_entry_price, limit=short_tp)
+        short_be_moved := true
+
+// ═══════════════════════════════════════════════════════════════════
+// VISUALIZATION
+// ═══════════════════════════════════════════════════════════════════
+
+// Plot SMAs
+plot(sma_35, "35 SMA", color=color.blue, linewidth=2)
+plot(sma_150, "150 SMA", color=color.orange, linewidth=2)
+
+// Plot signals
+plotshape(bullish_signal, "Bullish Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(bearish_signal, "Bearish Signal", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+// Highlight pending signals
+bgcolor(pending_long ? color.new(color.green, 90) : na, title="Pending Long")
+bgcolor(pending_short ? color.new(color.red, 90) : na, title="Pending Short")
+
+// ═══════════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════════
+
+alertcondition(bullish_signal, "Bullish Signal", "Trend Following: Bullish signal detected!")
+alertcondition(bearish_signal, "Bearish Signal", "Trend Following: Bearish signal detected!")

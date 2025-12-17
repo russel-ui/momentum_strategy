@@ -39,6 +39,11 @@ avoid_end1 = input.int(17, "Avoid End Hour 1", minval=0, maxval=23)
 avoid_start2 = input.int(17, "Avoid Start Hour 2", minval=0, maxval=23)
 avoid_end2 = input.int(21, "Avoid End Hour 2", minval=0, maxval=23)
 
+// Backtest Date Range
+use_date_filter = input.bool(false, "Use Date Range Filter", group="Backtest Period")
+start_date = input.time(timestamp("2020-01-01 00:00 +0000"), "Start Date", group="Backtest Period")
+end_date = input.time(timestamp("2030-12-31 23:59 +0000"), "End Date", group="Backtest Period")
+
 // ═══════════════════════════════════════════════════════════════════
 // CALCULATE INDICATORS
 // ═══════════════════════════════════════════════════════════════════
@@ -57,6 +62,10 @@ is_avoided_time() =>
     in_avoid_window1 = current_hour >= avoid_start1 and current_hour < avoid_end1
     in_avoid_window2 = current_hour >= avoid_start2 and current_hour < avoid_end2
     avoid_late_hours and (in_avoid_window1 or in_avoid_window2)
+
+// Check if current bar is within backtest date range
+in_date_range() =>
+    not use_date_filter or (time >= start_date and time <= end_date)
 
 // ═══════════════════════════════════════════════════════════════════
 // SIGNAL DETECTION
@@ -96,8 +105,8 @@ close_from_low = signal_close - signal_low
 close_pct_bull = candle_range_bull > 0 ? (close_from_low / candle_range_bull * 100.0) : 0
 bullish_strong_close = close_pct_bull >= strong_close_pct
 
-// Combined bullish signal (now includes candle size filter)
-bullish_signal = bullish_direction and bullish_stage and bullish_sweep and bullish_strong_close and candle_size_valid and not is_avoided_time()
+// Combined bullish signal (now includes candle size filter and date range)
+bullish_signal = bullish_direction and bullish_stage and bullish_sweep and bullish_strong_close and candle_size_valid and not is_avoided_time() and in_date_range()
 
 // BEARISH SIGNAL CONDITIONS
 // 1. Direction: Price closes below 35 SMA
@@ -116,8 +125,8 @@ close_from_high = signal_high - signal_close
 close_pct_bear = candle_range_bear > 0 ? (close_from_high / candle_range_bear * 100.0) : 0
 bearish_strong_close = close_pct_bear >= strong_close_pct
 
-// Combined bearish signal (now includes candle size filter)
-bearish_signal = bearish_direction and bearish_stage and bearish_sweep and bearish_strong_close and candle_size_valid and not is_avoided_time()
+// Combined bearish signal (now includes candle size filter and date range)
+bearish_signal = bearish_direction and bearish_stage and bearish_sweep and bearish_strong_close and candle_size_valid and not is_avoided_time() and in_date_range()
 
 // ═══════════════════════════════════════════════════════════════════
 // ENTRY LOGIC
@@ -265,6 +274,9 @@ plotshape(bearish_signal, "Bearish Signal", shape.triangledown, location.aboveba
 // Highlight pending signals
 bgcolor(pending_long ? color.new(color.green, 90) : na, title="Pending Long")
 bgcolor(pending_short ? color.new(color.red, 90) : na, title="Pending Short")
+
+// Highlight backtest period
+bgcolor(use_date_filter and in_date_range() ? color.new(color.blue, 95) : na, title="Backtest Period")
 
 // ═══════════════════════════════════════════════════════════════════
 // ALERTS

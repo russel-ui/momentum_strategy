@@ -266,6 +266,23 @@ if use_trailing and strategy.position_size < 0 and not short_be_moved
 plot(sma_35, "35 SMA", color=color.blue, linewidth=2)
 plot(sma_150, "150 SMA", color=color.orange, linewidth=2)
 
+// Daily Low Line
+daily_low = request.security(syminfo.tickerid, "D", low, lookahead=barmerge.lookahead_on)
+is_new_day = ta.change(time("D")) != 0
+
+var line daily_low_line = na
+
+// Create new line at start of each day
+if is_new_day
+    daily_low_line := line.new(bar_index, daily_low, bar_index, daily_low, 
+         color=color.new(color.purple, 0), width=1, style=line.style_solid)
+
+// Extend line throughout the day
+if not na(daily_low_line)
+    line.set_x2(daily_low_line, bar_index)
+    line.set_y1(daily_low_line, daily_low)
+    line.set_y2(daily_low_line, daily_low)
+
 // Plot signals
 plotshape(bullish_signal, "Bullish Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
 plotshape(bearish_signal, "Bearish Signal", shape.triangledown, location.abovebar, color.red, size=size.small)

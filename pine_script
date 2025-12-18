@@ -19,7 +19,6 @@ sma_150_period = input.int(150, "150 SMA Period (for TP extension)", minval=1)
 atr_period = input.int(5, "ATR Period", minval=1)
 atr_multiplier = input.float(5.0, "ATR Multiplier for Stage Filter", minval=0.1, step=0.1)
 strong_close_pct = input.float(65.0, "Strong Close % (from Low/High)", minval=0, maxval=100, step=1)
-wait_for_next_candle = input.bool(false, "Wait for Next Candle to Enter")
 
 // Candle Size Filter
 min_candle_atr_mult = input.float(0.5, "Min Candle Size (ATR Multiplier)", minval=0.1, step=0.1)
@@ -134,38 +133,34 @@ bearish_signal = bearish_direction and bearish_stage and bearish_sweep and beari
 
 var float signal_low_price = na
 var float signal_high_price = na
+var float signal_close_price = na
 var bool pending_long = false
 var bool pending_short = false
 
-// Store signal for next candle if wait mode is enabled
-if bullish_signal and not wait_for_next_candle
-    signal_low_price := signal_low
-    signal_high_price := signal_high
-   
-if bearish_signal and not wait_for_next_candle
-    signal_low_price := signal_low
-    signal_high_price := signal_high
-
-// Wait for next candle mode
-if bullish_signal and wait_for_next_candle
+// Store signal candle values when signal is detected
+if bullish_signal
     pending_long := true
     signal_low_price := signal_low
     signal_high_price := signal_high
+    signal_close_price := signal_close
    
-if bearish_signal and wait_for_next_candle
+if bearish_signal
     pending_short := true
     signal_low_price := signal_low
     signal_high_price := signal_high
+    signal_close_price := signal_close
 
 // Check entry conditions for pending signals
-can_enter_long = pending_long and close <= open
-can_enter_short = pending_short and close >= open
+// Bullish: next candle opens at or below signal candle's close
+// Bearish: next candle opens at or above signal candle's close
+can_enter_long = pending_long and open <= signal_close_price
+can_enter_short = pending_short and open >= signal_close_price
 
-// Clear pending signals if conditions not met
-if pending_long and close > open
+// Clear pending signals if entry conditions not met on the next bar
+if pending_long and not can_enter_long and not bullish_signal
     pending_long := false
    
-if pending_short and close < open
+if pending_short and not can_enter_short and not bearish_signal
     pending_short := false
 
 // ═══════════════════════════════════════════════════════════════════
@@ -179,14 +174,16 @@ calc_position_size(stop_distance) =>
     position_size
 
 // LONG ENTRY
-if (bullish_signal and not wait_for_next_candle) or can_enter_long
+// Entry on the open of the next candle if open <= signal candle's close
+if can_enter_long
     if strategy.position_size == 0
+        entry_price = open
         stop_loss = signal_low_price
-        risk_points = close - stop_loss
+        risk_points = entry_price - stop_loss
        
-        // Check if close is above 150 SMA for extended TP
-        tp_ratio = close > sma_150 ? tp_rr_extended : tp_rr_ratio
-        take_profit = close + (risk_points * tp_ratio)
+        // Check if entry price is above 150 SMA for extended TP
+        tp_ratio = entry_price > sma_150 ? tp_rr_extended : tp_rr_ratio
+        take_profit = entry_price + (risk_points * tp_ratio)
        
         strategy.entry("Long", strategy.long)
         strategy.exit("Long Exit", "Long", stop=stop_loss, limit=take_profit)
@@ -195,14 +192,16 @@ if (bullish_signal and not wait_for_next_candle) or can_enter_long
         pending_long := false
 
 // SHORT ENTRY
-if (bearish_signal and not wait_for_next_candle) or can_enter_short
+// Entry on the open of the next candle if open >= signal candle's close
+if can_enter_short
     if strategy.position_size == 0
+        entry_price = open
         stop_loss = signal_high_price
-        risk_points = stop_loss - close
+        risk_points = stop_loss - entry_price
        
-        // Check if close is below 150 SMA for extended TP
-        tp_ratio = close < sma_150 ? tp_rr_extended : tp_rr_ratio
-        take_profit = close - (risk_points * tp_ratio)
+        // Check if entry price is below 150 SMA for extended TP
+        tp_ratio = entry_price < sma_150 ? tp_rr_extended : tp_rr_ratio
+        take_profit = entry_price - (risk_points * tp_ratio)
        
         strategy.entry("Short", strategy.short)
         strategy.exit("Short Exit", "Short", stop=stop_loss, limit=take_profit)

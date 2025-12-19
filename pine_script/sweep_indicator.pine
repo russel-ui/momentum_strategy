@@ -1,0 +1,92 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+//@version=5
+indicator("Sweep Indicator", shorttitle="Sweep", overlay=true)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+atrLength = input.int(5, "ATR Length", minval=1)
+smaLength = input.int(35, "SMA Length", minval=1)
+minAtrMult = input.float(0.5, "Min ATR Multiplier", minval=0.1, step=0.1)
+maxAtrMult = input.float(2.0, "Max ATR Multiplier", minval=0.5, step=0.1)
+closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05, tooltip="For bullish: close must be >= this % of candle range. For bearish: close must be <= (1 - this %) of range")
+
+// Colors
+bullishColor = input.color(color.green, "Bullish Line Color")
+bearishColor = input.color(color.red, "Bearish Line Color")
+lineWidth = input.int(2, "Line Width", minval=1, maxval=5)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ATR and SMA
+atr5 = ta.atr(atrLength)
+sma35 = ta.sma(close, smaLength)
+
+// Candle measurements
+candleRange = high - low
+closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
+
+// Size conditions
+validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BULLISH SETUP (Low Sweep)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Conditions:
+// 1. Current low < previous low (sweeps the low)
+// 2. Candle size between 0.5x and 2x ATR(5)
+// 3. Close in upper 40% of candle (closePosition >= 0.6)
+// 4. Close above 35-SMA
+
+sweepsLow = low < low[1]
+bullishClose = closePosition >= closeThreshold
+aboveSMA = close > sma35
+
+bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BEARISH SETUP (High Sweep)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Conditions:
+// 1. Current high > previous high (sweeps the high)
+// 2. Candle size between 0.5x and 2x ATR(5)
+// 3. Close in lower 40% of candle (closePosition <= 0.4)
+// 4. Close below 35-SMA
+
+sweepsHigh = high > high[1]
+bearishClose = closePosition <= (1 - closeThreshold)
+belowSMA = close < sma35
+
+bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DRAW VERTICAL LINES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Bullish: vertical line extending downward from low
+if bullishSetup
+    lineBottom = low - atr5
+    line.new(bar_index, low, bar_index, lineBottom, color=bullishColor, width=lineWidth)
+
+// Bearish: vertical line extending upward from high
+if bearishSetup
+    lineTop = high + atr5
+    line.new(bar_index, high, bar_index, lineTop, color=bearishColor, width=lineWidth)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLOT SMA FOR REFERENCE
+// ══════════════════════════════════════════════════════════════════════════════
+
+plot(sma35, "35 SMA", color=color.orange, linewidth=2)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+alertcondition(bullishSetup, "Bullish Sweep", "Bullish low sweep detected")
+alertcondition(bearishSetup, "Bearish Sweep", "Bearish high sweep detected")

@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 //@version=5
-indicator("Sweep Indicator", shorttitle="Sweep", overlay=true)
+indicator("Sweep Indicator", shorttitle="Sweep", overlay=true, max_labels_count=500)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // INPUTS
@@ -13,9 +13,8 @@ maxAtrMult = input.float(2.0, "Max ATR Multiplier", minval=0.5, step=0.1)
 closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05, tooltip="For bullish: close must be >= this % of candle range. For bearish: close must be <= (1 - this %) of range")
 
 // Colors
-bullishColor = input.color(color.green, "Bullish Line Color")
-bearishColor = input.color(color.red, "Bearish Line Color")
-lineWidth = input.int(2, "Line Width", minval=1, maxval=5)
+bullishColor = input.color(color.green, "Bullish Color")
+bearishColor = input.color(color.red, "Bearish Color")
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CALCULATIONS
@@ -28,6 +27,7 @@ sma35 = ta.sma(close, smaLength)
 // Candle measurements
 candleRange = high - low
 closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
+closePercent = closePosition * 100
 
 // Size conditions
 validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
@@ -35,12 +35,6 @@ validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * 
 // ══════════════════════════════════════════════════════════════════════════════
 // BULLISH SETUP (Low Sweep)
 // ══════════════════════════════════════════════════════════════════════════════
-
-// Conditions:
-// 1. Current low < previous low (sweeps the low)
-// 2. Candle size between 0.5x and 2x ATR(5)
-// 3. Close in upper 40% of candle (closePosition >= 0.6)
-// 4. Close above 35-SMA
 
 sweepsLow = low < low[1]
 bullishClose = closePosition >= closeThreshold
@@ -52,12 +46,6 @@ bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA
 // BEARISH SETUP (High Sweep)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Conditions:
-// 1. Current high > previous high (sweeps the high)
-// 2. Candle size between 0.5x and 2x ATR(5)
-// 3. Close in lower 40% of candle (closePosition <= 0.4)
-// 4. Close below 35-SMA
-
 sweepsHigh = high > high[1]
 bearishClose = closePosition <= (1 - closeThreshold)
 belowSMA = close < sma35
@@ -65,18 +53,42 @@ belowSMA = close < sma35
 bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
 
 // ══════════════════════════════════════════════════════════════════════════════
-// DRAW VERTICAL LINES
+// VISUAL MARKERS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Bullish: vertical line extending downward from low
+// Bullish: marker below candle, percentage label above candle
 if bullishSetup
-    lineBottom = low - atr5
-    line.new(bar_index, low, bar_index, lineBottom, color=bullishColor, width=lineWidth)
+    // Arrow/marker below the low pointing to the sweep area
+    label.new(bar_index, low - atr5, "▲\n|\n|\n|", 
+              color=color.new(bullishColor, 70), 
+              style=label.style_none, 
+              textcolor=bullishColor, 
+              size=size.large,
+              textalign=text.align_center)
+    
+    // Percentage at top of candle
+    label.new(bar_index, high, str.tostring(closePercent, "#") + "%", 
+              color=bullishColor, 
+              style=label.style_label_down, 
+              textcolor=color.white, 
+              size=size.small)
 
-// Bearish: vertical line extending upward from high
+// Bearish: marker above candle, percentage label below candle
 if bearishSetup
-    lineTop = high + atr5
-    line.new(bar_index, high, bar_index, lineTop, color=bearishColor, width=lineWidth)
+    // Arrow/marker above the high pointing to the sweep area
+    label.new(bar_index, high + atr5, "|\n|\n|\n▼", 
+              color=color.new(bearishColor, 70), 
+              style=label.style_none, 
+              textcolor=bearishColor, 
+              size=size.large,
+              textalign=text.align_center)
+    
+    // Percentage at bottom of candle
+    label.new(bar_index, low, str.tostring(closePercent, "#") + "%", 
+              color=bearishColor, 
+              style=label.style_label_up, 
+              textcolor=color.white, 
+              size=size.small)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PLOT SMA FOR REFERENCE

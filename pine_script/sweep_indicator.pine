@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 //@version=5
-indicator("Sweep Indicator", shorttitle="Sweep", overlay=true, max_labels_count=500)
+indicator("Sweep Indicator", shorttitle="Sweep", overlay=true, max_labels_count=500, max_boxes_count=500)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // INPUTS
@@ -15,6 +15,7 @@ closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval
 // Colors
 bullishColor = input.color(color.green, "Bullish Color")
 bearishColor = input.color(color.red, "Bearish Color")
+boxOpacity = input.int(80, "Box Opacity", minval=0, maxval=100)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CALCULATIONS
@@ -27,7 +28,10 @@ sma35 = ta.sma(close, smaLength)
 // Candle measurements
 candleRange = high - low
 closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
-closePercent = closePosition * 100
+
+// Percentages
+bullishPercent = closePosition * 100           // From bottom (0% = low, 100% = high)
+bearishPercent = (1 - closePosition) * 100     // From top (0% = high, 100% = low)
 
 // Size conditions
 validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
@@ -56,35 +60,45 @@ bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
 // VISUAL MARKERS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Bullish: marker below candle, percentage label above candle
+// Bullish: box from low extending downward, percentage at top
 if bullishSetup
-    // Arrow/marker below the low pointing to the sweep area
-    label.new(bar_index, low - atr5, "▲\n|\n|\n|", 
-              color=color.new(bullishColor, 70), 
-              style=label.style_none, 
+    // Background box from low down to low - ATR
+    box.new(bar_index, low, bar_index, low - atr5, 
+            bgcolor=color.new(bullishColor, boxOpacity), 
+            border_color=bullishColor,
+            border_width=1)
+    
+    // ATR value label inside the box
+    label.new(bar_index, low - (atr5 / 2), str.tostring(atr5, "#.##"), 
+              color=color.new(color.white, 100), 
+              style=label.style_label_center, 
               textcolor=bullishColor, 
-              size=size.large,
-              textalign=text.align_center)
+              size=size.small)
     
     // Percentage at top of candle
-    label.new(bar_index, high, str.tostring(closePercent, "#") + "%", 
+    label.new(bar_index, high, str.tostring(bullishPercent, "#") + "%", 
               color=bullishColor, 
               style=label.style_label_down, 
               textcolor=color.white, 
               size=size.small)
 
-// Bearish: marker above candle, percentage label below candle
+// Bearish: box from high extending upward, percentage at bottom
 if bearishSetup
-    // Arrow/marker above the high pointing to the sweep area
-    label.new(bar_index, high + atr5, "|\n|\n|\n▼", 
-              color=color.new(bearishColor, 70), 
-              style=label.style_none, 
-              textcolor=bearishColor, 
-              size=size.large,
-              textalign=text.align_center)
+    // Background box from high up to high + ATR
+    box.new(bar_index, high + atr5, bar_index, high, 
+            bgcolor=color.new(bearishColor, boxOpacity), 
+            border_color=bearishColor,
+            border_width=1)
     
-    // Percentage at bottom of candle
-    label.new(bar_index, low, str.tostring(closePercent, "#") + "%", 
+    // ATR value label inside the box
+    label.new(bar_index, high + (atr5 / 2), str.tostring(atr5, "#.##"), 
+              color=color.new(color.white, 100), 
+              style=label.style_label_center, 
+              textcolor=bearishColor, 
+              size=size.small)
+    
+    // Percentage at bottom of candle (inverted)
+    label.new(bar_index, low, str.tostring(bearishPercent, "#") + "%", 
               color=bearishColor, 
               style=label.style_label_up, 
               textcolor=color.white, 

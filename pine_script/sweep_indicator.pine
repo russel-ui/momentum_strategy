@@ -10,7 +10,7 @@ atrLength = input.int(5, "ATR Length", minval=1)
 smaLength = input.int(35, "SMA Length", minval=1)
 minAtrMult = input.float(0.5, "Min ATR Multiplier", minval=0.1, step=0.1)
 maxAtrMult = input.float(2.0, "Max ATR Multiplier", minval=0.5, step=0.1)
-closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05, tooltip="For bullish: close must be >= this % of candle range. For bearish: close must be <= (1 - this %) of range")
+closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05)
 
 // Colors
 bullishColor = input.color(color.green, "Bullish Color")
@@ -21,61 +21,67 @@ boxOpacity = input.int(80, "Box Opacity", minval=0, maxval=100)
 // CALCULATIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ATR and SMA
 atr5 = ta.atr(atrLength)
 sma35 = ta.sma(close, smaLength)
 
-// Candle measurements
 candleRange = high - low
 closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
 
-// Percentages
 bullishPercent = closePosition * 100
 bearishPercent = (1 - closePosition) * 100
 
-// Size conditions
 validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// BULLISH SETUP (Low Sweep)
+// SETUPS
 // ══════════════════════════════════════════════════════════════════════════════
 
 sweepsLow = low < low[1]
 bullishClose = closePosition >= closeThreshold
 aboveSMA = close > sma35
-
 bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA
-
-// ══════════════════════════════════════════════════════════════════════════════
-// BEARISH SETUP (High Sweep)
-// ══════════════════════════════════════════════════════════════════════════════
 
 sweepsHigh = high > high[1]
 bearishClose = closePosition <= (1 - closeThreshold)
 belowSMA = close < sma35
-
 bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
 
 // ══════════════════════════════════════════════════════════════════════════════
-// VISUAL MARKERS
+// VISUAL MARKERS - BULLISH
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Bullish: box from low extending downward, percentage at top
+var box bullBox = na
+var label bullPctLabel = na
+
 if bullishSetup
-    boxTop = low
-    boxBottom = low - atr5
-    box.new(left=bar_index, top=boxTop, right=bar_index + 1, bottom=boxBottom, bgcolor=color.new(bullishColor, boxOpacity), border_color=bullishColor, border_width=1, text=str.tostring(atr5, "#.##"), text_color=bullishColor, text_size=size.small)
-    label.new(x=bar_index, y=high, text=str.tostring(bullishPercent, "#") + "%", color=bullishColor, style=label.style_label_down, textcolor=color.white, size=size.small)
-
-// Bearish: box from high extending upward, percentage at bottom
-if bearishSetup
-    boxTop = high + atr5
-    boxBottom = high
-    box.new(left=bar_index, top=boxTop, right=bar_index + 1, bottom=boxBottom, bgcolor=color.new(bearishColor, boxOpacity), border_color=bearishColor, border_width=1, text=str.tostring(atr5, "#.##"), text_color=bearishColor, text_size=size.small)
-    label.new(x=bar_index, y=low, text=str.tostring(bearishPercent, "#") + "%", color=bearishColor, style=label.style_label_up, textcolor=color.white, size=size.small)
+    bullBoxTop = low
+    bullBoxBot = low - atr5
+    bullBgColor = color.new(bullishColor, boxOpacity)
+    atrText = str.tostring(atr5, "#.##")
+    pctText = str.tostring(bullishPercent, "#") + "%"
+    
+    bullBox := box.new(bar_index, bullBoxTop, bar_index + 1, bullBoxBot, bullishColor, 1, line.style_solid, extend.none, xloc.bar_index, bullBgColor, atrText, size.small, bullishColor)
+    bullPctLabel := label.new(bar_index, high, pctText, xloc.bar_index, yloc.price, bullishColor, label.style_label_down, color.white, size.small)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PLOT SMA FOR REFERENCE
+// VISUAL MARKERS - BEARISH
+// ══════════════════════════════════════════════════════════════════════════════
+
+var box bearBox = na
+var label bearPctLabel = na
+
+if bearishSetup
+    bearBoxTop = high + atr5
+    bearBoxBot = high
+    bearBgColor = color.new(bearishColor, boxOpacity)
+    atrText = str.tostring(atr5, "#.##")
+    pctText = str.tostring(bearishPercent, "#") + "%"
+    
+    bearBox := box.new(bar_index, bearBoxTop, bar_index + 1, bearBoxBot, bearishColor, 1, line.style_solid, extend.none, xloc.bar_index, bearBgColor, atrText, size.small, bearishColor)
+    bearPctLabel := label.new(bar_index, low, pctText, xloc.bar_index, yloc.price, bearishColor, label.style_label_up, color.white, size.small)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLOT SMA
 // ══════════════════════════════════════════════════════════════════════════════
 
 plot(sma35, "35 SMA", color=color.orange, linewidth=2)

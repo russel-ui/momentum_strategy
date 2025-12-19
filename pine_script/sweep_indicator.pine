@@ -17,12 +17,19 @@ bullishColor = input.color(color.green, "Bullish Color")
 bearishColor = input.color(color.red, "Bearish Color")
 boxOpacity = input.int(80, "Box Opacity", minval=0, maxval=100)
 
+// SMA Colors
+sma35LightGreen = input.color(color.new(#90EE90, 0), "35 SMA Bullish", group="SMA Colors")
+sma35LightRed = input.color(color.new(#FF6B6B, 0), "35 SMA Bearish", group="SMA Colors")
+sma150DarkGreen = input.color(color.new(#006400, 0), "150 SMA Bullish", group="SMA Colors")
+sma150DarkRed = input.color(color.new(#8B0000, 0), "150 SMA Bearish", group="SMA Colors")
+
 // ══════════════════════════════════════════════════════════════════════════════
 // CALCULATIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
 atr5 = ta.atr(atrLength)
 sma35 = ta.sma(close, smaLength)
+sma150 = ta.sma(close, 150)
 
 candleRange = high - low
 closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
@@ -31,6 +38,10 @@ bullishPercent = closePosition * 100
 bearishPercent = (1 - closePosition) * 100
 
 validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
+
+// SMA color conditions
+sma35Color = close > sma35 ? sma35LightGreen : sma35LightRed
+sma150Color = close > sma150 ? sma150DarkGreen : sma150DarkRed
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SETUPS
@@ -81,10 +92,11 @@ if bearishSetup
     bearPctLabel := label.new(bar_index, low, pctText, xloc.bar_index, yloc.price, bearishColor, label.style_label_up, color.white, size.small)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PLOT SMA
+// PLOT SMAs
 // ══════════════════════════════════════════════════════════════════════════════
 
-plot(sma35, "35 SMA", color=color.orange, linewidth=2)
+plot(sma35, "35 SMA", color=sma35Color, linewidth=2)
+plot(sma150, "150 SMA", color=sma150Color, linewidth=2)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ALERTS

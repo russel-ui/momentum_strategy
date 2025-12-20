@@ -3,6 +3,16 @@
 indicator("Sweep Indicator", shorttitle="Sweep", overlay=true, max_labels_count=500, max_boxes_count=500)
 
 // ══════════════════════════════════════════════════════════════════════════════
+// IMPORT LIBRARY
+// ══════════════════════════════════════════════════════════════════════════════
+
+// NOTE: After publishing the library to TradingView, replace this with:
+// import YourUsername/SweepLibrary/1 as sweep
+// For now, we'll use the library functions inline for testing
+
+import YourUsername/SweepLibrary/1 as sweep
+
+// ══════════════════════════════════════════════════════════════════════════════
 // INPUTS
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -11,11 +21,15 @@ smaLength = input.int(35, "SMA Length", minval=1)
 minAtrMult = input.float(0.5, "Min ATR Multiplier", minval=0.1, step=0.1)
 maxAtrMult = input.float(2.0, "Max ATR Multiplier", minval=0.5, step=0.1)
 closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05)
+multiSweepLookback = input.int(5, "Multi-Sweep Lookback", minval=2, maxval=20)
+multiSweepMinCount = input.int(2, "Multi-Sweep Min Count", minval=2, maxval=10)
 
 // Colors
 bullishColor = input.color(color.green, "Bullish Color")
 bearishColor = input.color(color.red, "Bearish Color")
 boxOpacity = input.int(80, "Box Opacity", minval=0, maxval=100)
+multiSweepBullColor = input.color(color.new(#FFD700, 0), "Multi-Sweep Bullish")
+multiSweepBearColor = input.color(color.new(#FF00FF, 0), "Multi-Sweep Bearish")
 
 // SMA Colors
 sma35LightGreen = input.color(color.new(#90EE90, 0), "35 SMA Bullish", group="SMA Colors")
@@ -24,72 +38,53 @@ sma150DarkGreen = input.color(color.new(#006400, 0), "150 SMA Bullish", group="S
 sma150DarkRed = input.color(color.new(#8B0000, 0), "150 SMA Bearish", group="SMA Colors")
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CALCULATIONS
+// DETECT SWEEPS USING LIBRARY
 // ══════════════════════════════════════════════════════════════════════════════
 
-atr5 = ta.atr(atrLength)
+bullishData = sweep.detectBullishSweep(atrLength, smaLength, minAtrMult, maxAtrMult, closeThreshold, multiSweepLookback, multiSweepMinCount)
+bearishData = sweep.detectBearishSweep(atrLength, smaLength, minAtrMult, maxAtrMult, closeThreshold, multiSweepLookback, multiSweepMinCount)
+
+// SMA values for plotting
 sma35 = ta.sma(close, smaLength)
 sma150 = ta.sma(close, 150)
-
-candleRange = high - low
-closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
-
-bullishPercent = closePosition * 100
-bearishPercent = (1 - closePosition) * 100
-
-validSize = candleRange >= (minAtrMult * atr5) and candleRange <= (maxAtrMult * atr5)
-
-// SMA color conditions
-sma35Color = close > sma35 ? sma35LightGreen : sma35LightRed
-sma150Color = close > sma150 ? sma150DarkGreen : sma150DarkRed
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SETUPS
-// ══════════════════════════════════════════════════════════════════════════════
-
-sweepsLow = low < low[1]
-bullishClose = closePosition >= closeThreshold
-aboveSMA = close > sma35
-bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA
-
-sweepsHigh = high > high[1]
-bearishClose = closePosition <= (1 - closeThreshold)
-belowSMA = close < sma35
-bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
+sma35Color = sweep.isPriceAboveSMA(smaLength) ? sma35LightGreen : sma35LightRed
+sma150Color = sweep.isPriceAboveSMA(150) ? sma150DarkGreen : sma150DarkRed
 
 // ══════════════════════════════════════════════════════════════════════════════
 // VISUAL MARKERS - BULLISH
 // ══════════════════════════════════════════════════════════════════════════════
 
-var box bullBox = na
-var label bullPctLabel = na
-
-if bullishSetup
-    bullBoxTop = low
-    bullBoxBot = low - atr5
-    bullBgColor = color.new(bullishColor, boxOpacity)
-    atrText = str.tostring(atr5, "#.##")
-    pctText = str.tostring(bullishPercent, "#") + "%"
+if bullishData.isValid
+    boxColor = bullishData.isMultiSweep ? multiSweepBullColor : bullishColor
+    bgColor = color.new(boxColor, boxOpacity)
+    borderWidth = bullishData.isMultiSweep ? 3 : 1
+    atrText = str.tostring(bullishData.atrValue, "#.##")
+    pctText = str.tostring(bullishData.closePercent, "#") + "%"
     
-    bullBox := box.new(bar_index, bullBoxTop, bar_index + 1, bullBoxBot, bullishColor, 1, line.style_solid, extend.none, xloc.bar_index, bullBgColor, atrText, size.small, bullishColor)
-    bullPctLabel := label.new(bar_index, high, pctText, xloc.bar_index, yloc.price, bullishColor, label.style_label_down, color.white, size.small)
+    box.new(bar_index, bullishData.boxTop, bar_index + 1, bullishData.boxBottom, boxColor, borderWidth, line.style_solid, extend.none, xloc.bar_index, bgColor, atrText, size.small, boxColor)
+    label.new(bar_index, high, pctText, xloc.bar_index, yloc.price, boxColor, label.style_label_down, color.white, size.small)
+    
+    if bullishData.isMultiSweep
+        sweepText = "★ " + str.tostring(bullishData.sweepCount) + " lows"
+        label.new(bar_index, bullishData.boxBottom, sweepText, xloc.bar_index, yloc.price, multiSweepBullColor, label.style_label_up, color.black, size.normal)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // VISUAL MARKERS - BEARISH
 // ══════════════════════════════════════════════════════════════════════════════
 
-var box bearBox = na
-var label bearPctLabel = na
-
-if bearishSetup
-    bearBoxTop = high + atr5
-    bearBoxBot = high
-    bearBgColor = color.new(bearishColor, boxOpacity)
-    atrText = str.tostring(atr5, "#.##")
-    pctText = str.tostring(bearishPercent, "#") + "%"
+if bearishData.isValid
+    boxColor = bearishData.isMultiSweep ? multiSweepBearColor : bearishColor
+    bgColor = color.new(boxColor, boxOpacity)
+    borderWidth = bearishData.isMultiSweep ? 3 : 1
+    atrText = str.tostring(bearishData.atrValue, "#.##")
+    pctText = str.tostring(bearishData.closePercent, "#") + "%"
     
-    bearBox := box.new(bar_index, bearBoxTop, bar_index + 1, bearBoxBot, bearishColor, 1, line.style_solid, extend.none, xloc.bar_index, bearBgColor, atrText, size.small, bearishColor)
-    bearPctLabel := label.new(bar_index, low, pctText, xloc.bar_index, yloc.price, bearishColor, label.style_label_up, color.white, size.small)
+    box.new(bar_index, bearishData.boxTop, bar_index + 1, bearishData.boxBottom, boxColor, borderWidth, line.style_solid, extend.none, xloc.bar_index, bgColor, atrText, size.small, boxColor)
+    label.new(bar_index, low, pctText, xloc.bar_index, yloc.price, boxColor, label.style_label_up, color.white, size.small)
+    
+    if bearishData.isMultiSweep
+        sweepText = "★ " + str.tostring(bearishData.sweepCount) + " highs"
+        label.new(bar_index, bearishData.boxTop, sweepText, xloc.bar_index, yloc.price, multiSweepBearColor, label.style_label_down, color.black, size.normal)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PLOT SMAs
@@ -102,5 +97,7 @@ plot(sma150, "150 SMA", color=sma150Color, linewidth=2)
 // ALERTS
 // ══════════════════════════════════════════════════════════════════════════════
 
-alertcondition(bullishSetup, "Bullish Sweep", "Bullish low sweep detected")
-alertcondition(bearishSetup, "Bearish Sweep", "Bearish high sweep detected")
+alertcondition(bullishData.isValid, "Bullish Sweep", "Bullish low sweep detected")
+alertcondition(bearishData.isValid, "Bearish Sweep", "Bearish high sweep detected")
+alertcondition(bullishData.isMultiSweep, "Bullish Multi-Sweep", "Strong bullish sweep - multiple lows taken")
+alertcondition(bearishData.isMultiSweep, "Bearish Multi-Sweep", "Strong bearish sweep - multiple highs taken")

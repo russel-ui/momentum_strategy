@@ -1,0 +1,184 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+//@version=5
+
+// @description Library containing core sweep detection logic for identifying liquidity sweeps.
+// Use this library in your indicators and strategies for consistent sweep detection.
+library("SweepLibrary", overlay=true)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CUSTOM TYPES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// @type Contains all data about a detected sweep setup
+// @field isValid Whether the setup meets all criteria
+// @field isMultiSweep Whether multiple distinct levels were swept
+// @field sweepCount Number of distinct levels swept
+// @field closePercent Where price closed within the candle (0-100)
+// @field atrValue Current ATR value
+// @field boxTop Top of the visual box
+// @field boxBottom Bottom of the visual box
+export type SweepData
+    bool isValid
+    bool isMultiSweep
+    int sweepCount
+    float closePercent
+    float atrValue
+    float boxTop
+    float boxBottom
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// @function Checks if candle size is within valid ATR range
+// @param candleHigh The high of the candle
+// @param candleLow The low of the candle
+// @param atrValue The ATR value to compare against
+// @param minMult Minimum ATR multiplier (default 0.5)
+// @param maxMult Maximum ATR multiplier (default 2.0)
+// @returns True if candle size is valid
+export isValidCandleSize(float candleHigh, float candleLow, float atrValue, float minMult = 0.5, float maxMult = 2.0) =>
+    candleRange = candleHigh - candleLow
+    candleRange >= (minMult * atrValue) and candleRange <= (maxMult * atrValue)
+
+// @function Calculates where price closed within the candle range
+// @param candleClose The close price
+// @param candleHigh The high of the candle
+// @param candleLow The low of the candle
+// @returns Close position as decimal (0.0 = low, 1.0 = high)
+export calcClosePosition(float candleClose, float candleHigh, float candleLow) =>
+    candleRange = candleHigh - candleLow
+    candleRange > 0 ? (candleClose - candleLow) / candleRange : 0.5
+
+// @function Counts distinct lows swept by current candle
+// @param currentLow Current candle's low
+// @param lookback Number of bars to look back
+// @returns Number of distinct lows swept
+export countDistinctLowsSwept(float currentLow, int lookback) =>
+    count = 0
+    minLowSoFar = 1e10
+    for i = 1 to lookback
+        prevLow = low[i]
+        if prevLow < minLowSoFar and currentLow < prevLow
+            count := count + 1
+            minLowSoFar := prevLow
+    count
+
+// @function Counts distinct highs swept by current candle
+// @param currentHigh Current candle's high
+// @param lookback Number of bars to look back
+// @returns Number of distinct highs swept
+export countDistinctHighsSwept(float currentHigh, int lookback) =>
+    count = 0
+    maxHighSoFar = 0.0
+    for i = 1 to lookback
+        prevHigh = high[i]
+        if prevHigh > maxHighSoFar and currentHigh > prevHigh
+            count := count + 1
+            maxHighSoFar := prevHigh
+    count
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN DETECTION FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// @function Detects bullish sweep setup (low sweep with strong close)
+// @param atrLength Period for ATR calculation
+// @param smaLength Period for SMA calculation
+// @param minAtrMult Minimum candle size as ATR multiple
+// @param maxAtrMult Maximum candle size as ATR multiple
+// @param closeThreshold Minimum close position (0.6 = upper 40%)
+// @param multiSweepLookback Bars to look back for multi-sweep
+// @param multiSweepMinCount Minimum sweeps to qualify as multi-sweep
+// @returns SweepData object with all setup information
+export detectBullishSweep(int atrLength, int smaLength, float minAtrMult, float maxAtrMult, float closeThreshold, int multiSweepLookback, int multiSweepMinCount) =>
+    atrValue = ta.atr(atrLength)
+    smaValue = ta.sma(close, smaLength)
+    
+    sweepsLow = low < low[1]
+    validSize = isValidCandleSize(high, low, atrValue, minAtrMult, maxAtrMult)
+    closePos = calcClosePosition(close, high, low)
+    bullishClose = closePos >= closeThreshold
+    aboveSMA = close > smaValue
+    
+    isValid = sweepsLow and validSize and bullishClose and aboveSMA
+    
+    lowsSwept = countDistinctLowsSwept(low, multiSweepLookback)
+    isMulti = lowsSwept >= multiSweepMinCount
+    
+    closePercent = closePos * 100
+    boxTop = low
+    boxBottom = low - atrValue
+    
+    SweepData.new(isValid, isValid and isMulti, lowsSwept, closePercent, atrValue, boxTop, boxBottom)
+
+// @function Detects bearish sweep setup (high sweep with weak close)
+// @param atrLength Period for ATR calculation
+// @param smaLength Period for SMA calculation
+// @param minAtrMult Minimum candle size as ATR multiple
+// @param maxAtrMult Maximum candle size as ATR multiple
+// @param closeThreshold Minimum close position threshold (will use 1 - threshold for bearish)
+// @param multiSweepLookback Bars to look back for multi-sweep
+// @param multiSweepMinCount Minimum sweeps to qualify as multi-sweep
+// @returns SweepData object with all setup information
+export detectBearishSweep(int atrLength, int smaLength, float minAtrMult, float maxAtrMult, float closeThreshold, int multiSweepLookback, int multiSweepMinCount) =>
+    atrValue = ta.atr(atrLength)
+    smaValue = ta.sma(close, smaLength)
+    
+    sweepsHigh = high > high[1]
+    validSize = isValidCandleSize(high, low, atrValue, minAtrMult, maxAtrMult)
+    closePos = calcClosePosition(close, high, low)
+    bearishClose = closePos <= (1 - closeThreshold)
+    belowSMA = close < smaValue
+    
+    isValid = sweepsHigh and validSize and bearishClose and belowSMA
+    
+    highsSwept = countDistinctHighsSwept(high, multiSweepLookback)
+    isMulti = highsSwept >= multiSweepMinCount
+    
+    closePercent = (1 - closePos) * 100  // Inverted for bearish
+    boxTop = high + atrValue
+    boxBottom = high
+    
+    SweepData.new(isValid, isValid and isMulti, highsSwept, closePercent, atrValue, boxTop, boxBottom)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POSITION SIZING FUNCTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+// @function Calculates position size based on risk percentage
+// @param equity Current account equity
+// @param riskPercent Percentage of equity to risk per trade
+// @param stopDistance Distance from entry to stop loss in price
+// @returns Position size (units/contracts)
+export calcPositionSize(float equity, float riskPercent, float stopDistance) =>
+    if stopDistance <= 0
+        1.0
+    else
+        riskAmount = equity * (riskPercent / 100)
+        posSize = riskAmount / stopDistance
+        math.max(posSize, 1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SMA COLOR HELPER
+// ══════════════════════════════════════════════════════════════════════════════
+
+// @function Determines if price is above a given SMA
+// @param smaLength Period for SMA
+// @returns True if close > SMA
+export isPriceAboveSMA(int smaLength) =>
+    close > ta.sma(close, smaLength)
+
+// @function Checks if SMAs are aligned bullish (fast > slow)
+// @param fastLength Fast SMA period
+// @param slowLength Slow SMA period
+// @returns True if fast SMA > slow SMA
+export isSMAsBullish(int fastLength, int slowLength) =>
+    ta.sma(close, fastLength) > ta.sma(close, slowLength)
+
+// @function Checks if SMAs are aligned bearish (fast < slow)
+// @param fastLength Fast SMA period
+// @param slowLength Slow SMA period
+// @returns True if fast SMA < slow SMA
+export isSMAsBearish(int fastLength, int slowLength) =>
+    ta.sma(close, fastLength) < ta.sma(close, slowLength)

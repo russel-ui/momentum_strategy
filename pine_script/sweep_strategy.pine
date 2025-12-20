@@ -1,0 +1,299 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+//@version=5
+strategy("Sweep Strategy", shorttitle="Sweep Strat", overlay=true, max_labels_count=500, max_boxes_count=500, initial_capital=10000, currency=currency.USD)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// IMPORT LIBRARY
+// ══════════════════════════════════════════════════════════════════════════════
+
+// NOTE: After publishing the library to TradingView, replace this with:
+// import YourUsername/SweepLibrary/1 as sweep
+
+import YourUsername/SweepLibrary/1 as sweep
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS - SWEEP DETECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+atrLength = input.int(5, "ATR Length", minval=1)
+smaLength = input.int(35, "SMA Length", minval=1)
+minAtrMult = input.float(0.5, "Min ATR Multiplier", minval=0.1, step=0.1)
+maxAtrMult = input.float(2.0, "Max ATR Multiplier", minval=0.5, step=0.1)
+closeThreshold = input.float(0.6, "Close Position Threshold", minval=0.0, maxval=1.0, step=0.05)
+multiSweepLookback = input.int(5, "Multi-Sweep Lookback", minval=2, maxval=20)
+maxSweepCount = input.int(2, "Max Sweeps Allowed", minval=1, maxval=10, tooltip="No trade if candle sweeps more than this many levels")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS - BACKTEST PERIOD
+// ══════════════════════════════════════════════════════════════════════════════
+
+useDateFilter = input.bool(false, "Use Date Filter", group="Backtest Period")
+startDate = input.time(timestamp("2020-01-01 00:00"), "Start Date", group="Backtest Period")
+endDate = input.time(timestamp("2030-12-31 23:59"), "End Date", group="Backtest Period")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS - RISK MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+riskPercent = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10, step=0.1, group="Risk Management")
+enablePyramiding = input.bool(false, "Enable Pyramiding", group="Risk Management")
+maxPyramidPositions = input.int(3, "Max Pyramid Positions", minval=2, maxval=10, group="Risk Management")
+useBreakevenStop = input.bool(true, "Move Stop to Breakeven at 1R", group="Risk Management")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS - STRATEGY
+// ══════════════════════════════════════════════════════════════════════════════
+
+pipSize = input.float(0.0001, "Pip Size", tooltip="0.0001 for most pairs, 0.01 for JPY pairs", group="Strategy")
+stopPips = input.float(2.0, "Stop Loss (pips beyond candle)", minval=0.1, step=0.1, group="Strategy")
+trendyRR = input.float(2.5, "R:R when SMAs aligned", minval=0.5, step=0.1, group="Strategy")
+counterRR = input.float(1.2, "R:R when SMAs not aligned", minval=0.5, step=0.1, group="Strategy")
+useTimeFilter = input.bool(true, "Use Time Filter", group="Strategy")
+noTradeStartHour = input.int(13, "No Trade Start Hour", minval=0, maxval=23, group="Strategy")
+noTradeEndHour = input.int(21, "No Trade End Hour", minval=0, maxval=23, group="Strategy")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUTS - COLORS
+// ══════════════════════════════════════════════════════════════════════════════
+
+bullishColor = input.color(color.green, "Bullish Color")
+bearishColor = input.color(color.red, "Bearish Color")
+boxOpacity = input.int(80, "Box Opacity", minval=0, maxval=100)
+tooManySweepsColor = input.color(color.new(#FF8C00, 0), "Too Many Sweeps Color")
+
+// SMA Colors
+sma35LightGreen = input.color(color.new(#90EE90, 0), "35 SMA Bullish", group="SMA Colors")
+sma35LightRed = input.color(color.new(#FF6B6B, 0), "35 SMA Bearish", group="SMA Colors")
+sma150DarkGreen = input.color(color.new(#006400, 0), "150 SMA Bullish", group="SMA Colors")
+sma150DarkRed = input.color(color.new(#8B0000, 0), "150 SMA Bearish", group="SMA Colors")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FILTERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+inDateRange = useDateFilter ? (time >= startDate and time <= endDate) : true
+currentHour = hour
+inNoTradeZone = useTimeFilter and (currentHour >= noTradeStartHour and currentHour < noTradeEndHour)
+validTradeTime = not inNoTradeZone
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DETECT SWEEPS USING LIBRARY
+// ══════════════════════════════════════════════════════════════════════════════
+
+bullishData = sweep.detectBullishSweep(atrLength, smaLength, minAtrMult, maxAtrMult, closeThreshold, multiSweepLookback, 1)
+bearishData = sweep.detectBearishSweep(atrLength, smaLength, minAtrMult, maxAtrMult, closeThreshold, multiSweepLookback, 1)
+
+// Check for too many sweeps (filter out)
+tooManyLowsSwept = bullishData.sweepCount > maxSweepCount
+tooManyHighsSwept = bearishData.sweepCount > maxSweepCount
+
+bullishValid = bullishData.isValid and not tooManyLowsSwept
+bearishValid = bearishData.isValid and not tooManyHighsSwept
+
+// SMA alignment using library
+smasBullish = sweep.isSMAsBullish(smaLength, 150)
+smasBearish = sweep.isSMAsBearish(smaLength, 150)
+
+// SMA values for plotting
+sma35 = ta.sma(close, smaLength)
+sma150 = ta.sma(close, 150)
+sma35Color = sweep.isPriceAboveSMA(smaLength) ? sma35LightGreen : sma35LightRed
+sma150Color = sweep.isPriceAboveSMA(150) ? sma150DarkGreen : sma150DarkRed
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PYRAMIDING LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+
+var int longPositions = 0
+var int shortPositions = 0
+
+canAddLong = enablePyramiding ? (longPositions < maxPyramidPositions and shortPositions == 0) : (strategy.position_size == 0)
+canAddShort = enablePyramiding ? (shortPositions < maxPyramidPositions and longPositions == 0) : (strategy.position_size == 0)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BREAKEVEN TRACKING
+// ══════════════════════════════════════════════════════════════════════════════
+
+var float entryPrice = na
+var float originalStop = na
+var float takeProfit = na
+var float oneRTarget = na
+var bool isLong = false
+var bool movedToBreakeven = false
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PENDING ORDER LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+
+var bool pendingLong = false
+var bool pendingShort = false
+var float pendingStopLong = na
+var float pendingStopShort = na
+var bool pendingSmasAlignedLong = false
+var bool pendingSmasAlignedShort = false
+
+if bullishValid and validTradeTime and inDateRange and canAddLong
+    pendingLong := true
+    pendingStopLong := low - (stopPips * pipSize)
+    pendingSmasAlignedLong := smasBullish
+
+if bearishValid and validTradeTime and inDateRange and canAddShort
+    pendingShort := true
+    pendingStopShort := high + (stopPips * pipSize)
+    pendingSmasAlignedShort := smasBearish
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXECUTE LONG ENTRY
+// ══════════════════════════════════════════════════════════════════════════════
+
+if pendingLong[1] and inDateRange
+    stopDistance = open - pendingStopLong[1]
+    if stopDistance > 0
+        rrMultiple = pendingSmasAlignedLong[1] ? trendyRR : counterRR
+        tp = open + (stopDistance * rrMultiple)
+        posSize = sweep.calcPositionSize(strategy.equity, riskPercent, stopDistance)
+        
+        strategy.entry("Long", strategy.long, qty=posSize)
+        
+        entryPrice := open
+        originalStop := pendingStopLong[1]
+        takeProfit := tp
+        oneRTarget := open + stopDistance
+        isLong := true
+        movedToBreakeven := false
+        
+        strategy.exit("Long Exit", "Long", stop=pendingStopLong[1], limit=tp)
+        longPositions := longPositions + 1
+    pendingLong := false
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXECUTE SHORT ENTRY
+// ══════════════════════════════════════════════════════════════════════════════
+
+if pendingShort[1] and inDateRange
+    stopDistance = pendingStopShort[1] - open
+    if stopDistance > 0
+        rrMultiple = pendingSmasAlignedShort[1] ? trendyRR : counterRR
+        tp = open - (stopDistance * rrMultiple)
+        posSize = sweep.calcPositionSize(strategy.equity, riskPercent, stopDistance)
+        
+        strategy.entry("Short", strategy.short, qty=posSize)
+        
+        entryPrice := open
+        originalStop := pendingStopShort[1]
+        takeProfit := tp
+        oneRTarget := open - stopDistance
+        isLong := false
+        movedToBreakeven := false
+        
+        strategy.exit("Short Exit", "Short", stop=pendingStopShort[1], limit=tp)
+        shortPositions := shortPositions + 1
+    pendingShort := false
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BREAKEVEN STOP LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+
+if useBreakevenStop and strategy.position_size != 0 and not movedToBreakeven
+    if isLong
+        if high >= oneRTarget
+            strategy.exit("Long Exit", "Long", stop=entryPrice, limit=takeProfit)
+            movedToBreakeven := true
+    else
+        if low <= oneRTarget
+            strategy.exit("Short Exit", "Short", stop=entryPrice, limit=takeProfit)
+            movedToBreakeven := true
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESET WHEN FLAT
+// ══════════════════════════════════════════════════════════════════════════════
+
+if strategy.position_size == 0
+    longPositions := 0
+    shortPositions := 0
+    entryPrice := na
+    originalStop := na
+    takeProfit := na
+    oneRTarget := na
+    movedToBreakeven := false
+
+if not inDateRange and strategy.position_size != 0
+    strategy.close_all("Out of date range")
+    longPositions := 0
+    shortPositions := 0
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUAL MARKERS - BULLISH
+// ══════════════════════════════════════════════════════════════════════════════
+
+if bullishData.isValid
+    boxColor = tooManyLowsSwept ? tooManySweepsColor : bullishColor
+    bgColor = color.new(boxColor, boxOpacity)
+    borderWidth = tooManyLowsSwept ? 2 : 1
+    
+    statusIcon = tooManyLowsSwept ? "⚠" : (validTradeTime and inDateRange ? "✓" : "✗")
+    labelText = str.tostring(bullishData.closePercent, "#") + "% " + statusIcon
+    
+    box.new(bar_index, bullishData.boxTop, bar_index + 1, bullishData.boxBottom, boxColor, borderWidth, line.style_solid, extend.none, xloc.bar_index, bgColor, str.tostring(bullishData.atrValue, "#.##"), size.small, boxColor)
+    label.new(bar_index, high, labelText, xloc.bar_index, yloc.price, boxColor, label.style_label_down, color.white, size.normal)
+    label.new(bar_index, bullishData.boxBottom, str.tostring(bullishData.sweepCount) + " lows", xloc.bar_index, yloc.price, boxColor, label.style_label_up, color.white, size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUAL MARKERS - BEARISH
+// ══════════════════════════════════════════════════════════════════════════════
+
+if bearishData.isValid
+    boxColor = tooManyHighsSwept ? tooManySweepsColor : bearishColor
+    bgColor = color.new(boxColor, boxOpacity)
+    borderWidth = tooManyHighsSwept ? 2 : 1
+    
+    statusIcon = tooManyHighsSwept ? "⚠" : (validTradeTime and inDateRange ? "✓" : "✗")
+    labelText = str.tostring(bearishData.closePercent, "#") + "% " + statusIcon
+    
+    box.new(bar_index, bearishData.boxTop, bar_index + 1, bearishData.boxBottom, boxColor, borderWidth, line.style_solid, extend.none, xloc.bar_index, bgColor, str.tostring(bearishData.atrValue, "#.##"), size.small, boxColor)
+    label.new(bar_index, low, labelText, xloc.bar_index, yloc.price, boxColor, label.style_label_up, color.white, size.normal)
+    label.new(bar_index, bearishData.boxTop, str.tostring(bearishData.sweepCount) + " highs", xloc.bar_index, yloc.price, boxColor, label.style_label_down, color.white, size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BACKGROUND SHADING
+// ══════════════════════════════════════════════════════════════════════════════
+
+bgcolor(inNoTradeZone ? color.new(color.gray, 90) : na, title="No Trade Zone")
+bgcolor(useDateFilter and not inDateRange ? color.new(color.red, 95) : na, title="Outside Backtest Period")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLOT SMAs
+// ══════════════════════════════════════════════════════════════════════════════
+
+plot(sma35, "35 SMA", color=sma35Color, linewidth=2)
+plot(sma150, "150 SMA", color=sma150Color, linewidth=2)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLOT TRADE LEVELS
+// ══════════════════════════════════════════════════════════════════════════════
+
+plot(strategy.position_size != 0 ? oneRTarget : na, "1R Target", color=color.new(color.blue, 50), style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size != 0 and movedToBreakeven ? entryPrice : na, "Breakeven Stop", color=color.new(color.orange, 0), style=plot.style_linebr, linewidth=2)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INFO TABLE
+// ══════════════════════════════════════════════════════════════════════════════
+
+var table infoTable = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 80), border_width=1)
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Risk/Trade", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, str.tostring(riskPercent) + "%", text_color=color.yellow, text_size=size.small)
+    table.cell(infoTable, 0, 1, "Pyramiding", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, enablePyramiding ? "ON" : "OFF", text_color=enablePyramiding ? color.green : color.red, text_size=size.small)
+    table.cell(infoTable, 0, 2, "BE at 1R", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, useBreakevenStop ? "ON" : "OFF", text_color=useBreakevenStop ? color.green : color.red, text_size=size.small)
+    table.cell(infoTable, 0, 3, "Date Filter", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, useDateFilter ? "ON" : "OFF", text_color=useDateFilter ? color.yellow : color.green, text_size=size.small)
+    table.cell(infoTable, 0, 4, "Time Filter", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, useTimeFilter ? "ON" : "OFF", text_color=useTimeFilter ? color.yellow : color.green, text_size=size.small)
+    table.cell(infoTable, 0, 5, "In Position", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 5, strategy.position_size != 0 ? (isLong ? "LONG" : "SHORT") : "NO", text_color=strategy.position_size != 0 ? (isLong ? color.green : color.red) : color.gray, text_size=size.small)
+    table.cell(infoTable, 0, 6, "At Breakeven", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 6, movedToBreakeven ? "YES" : "NO", text_color=movedToBreakeven ? color.green : color.gray, text_size=size.small)
+    table.cell(infoTable, 0, 7, "1R Target", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 7, strategy.position_size != 0 ? str.tostring(oneRTarget, "#.#####") : "-", text_color=color.blue, text_size=size.small)

@@ -1,0 +1,151 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © YourUsername
+
+//@version=5
+strategy("Liquidity Sweep Strategy (4H)", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// Import the library
+// NOTE: When publishing/using, replace 'YourUsername' with your actual TradingView username
+// and ensure the library is published first
+import YourUsername/LiquiditySweepDetector/1 as lsd
+
+// ==================== Strategy Parameters ====================
+// Liquidity Sweep Detection Settings
+lookbackPeriod = input.int(20, "Lookback Period", minval=5, maxval=100, group="Sweep Detection")
+pivotLeft = input.int(10, "Pivot Left Bars", minval=1, maxval=50, group="Sweep Detection")
+pivotRight = input.int(5, "Pivot Right Bars", minval=1, maxval=50, group="Sweep Detection")
+sweepThreshold = input.float(0.001, "Sweep Threshold %", minval=0.0001, maxval=0.01, step=0.0001, group="Sweep Detection")
+
+// Risk Management
+atrLength = input.int(14, "ATR Length", minval=1, group="Risk Management")
+atrMultiplier = input.float(1.5, "ATR Multiplier (Stop Loss)", minval=0.5, maxval=5.0, step=0.1, group="Risk Management")
+riskRewardRatio = input.float(2.0, "Risk:Reward Ratio", minval=1.0, maxval=10.0, step=0.5, group="Risk Management")
+
+// Entry Conditions
+usePivotMethod = input.bool(true, "Use Pivot-Based Detection", group="Entry Conditions")
+useSimpleMethod = input.bool(false, "Use Simple Lookback Detection", group="Entry Conditions")
+requireConfirmation = input.bool(true, "Require Next Candle Confirmation", group="Entry Conditions")
+
+// Trade Management
+useTrailingStop = input.bool(false, "Use Trailing Stop", group="Trade Management")
+trailingStopATR = input.float(2.0, "Trailing Stop ATR Multiplier", minval=0.5, maxval=10.0, group="Trade Management")
+
+// ==================== Timeframe Check ====================
+// Ensure we're on 4H timeframe or allow strategy to work on any timeframe
+currentTimeframe = timeframe.period
+is4H = currentTimeframe == "240"
+
+if not is4H
+    runtime.error("This strategy is designed for 4H timeframe. Current timeframe: " + currentTimeframe)
+
+
+// ==================== Library Function Calls ====================
+// Method 1: Pivot-based detection (recommended)
+[pivotBullSweep, pivotBearSweep, pivotSweepLevel] = lsd.detectPivotBasedSweep(pivotLeft, pivotRight, sweepThreshold)
+
+// Method 2: Simple lookback detection
+[simpleBullSweep, simpleBullPrice] = lsd.detectBullishSweep(lookbackPeriod, atrMultiplier, atrLength)
+[simpleBearSweep, simpleBearPrice] = lsd.detectBearishSweep(lookbackPeriod, atrMultiplier, atrLength)
+
+// Combine methods based on user preference
+bullishSweep = usePivotMethod ? pivotBullSweep : useSimpleMethod ? simpleBullSweep : false
+bearishSweep = usePivotMethod ? pivotBearSweep : useSimpleMethod ? simpleBearSweep : false
+sweepPrice = usePivotMethod ? pivotSweepLevel : bullishSweep ? simpleBullPrice : bearishSweep ? simpleBearPrice : na
+
+
+// ==================== Entry Signals ====================
+var bool waitingForBullConfirmation = false
+var bool waitingForBearConfirmation = false
+var float confirmationLevel = na
+
+// Handle confirmation logic
+if requireConfirmation
+    if bullishSweep and not waitingForBullConfirmation
+        waitingForBullConfirmation := true
+        confirmationLevel := close
+    
+    if bearishSweep and not waitingForBearConfirmation
+        waitingForBearConfirmation := true
+        confirmationLevel := close
+
+// Entry conditions with optional confirmation
+longCondition = false
+shortCondition = false
+
+if requireConfirmation
+    // Enter long if we were waiting for confirmation and price stays bullish
+    longCondition := waitingForBullConfirmation and close > confirmationLevel
+    // Enter short if we were waiting for confirmation and price stays bearish
+    shortCondition := waitingForBearConfirmation and close < confirmationLevel
+    
+    // Reset confirmation flags after entry or if sweep invalidated
+    if longCondition or (waitingForBullConfirmation and close < low[1])
+        waitingForBullConfirmation := false
+        confirmationLevel := na
+    if shortCondition or (waitingForBearConfirmation and close > high[1])
+        waitingForBearConfirmation := false
+        confirmationLevel := na
+else
+    longCondition := bullishSweep
+    shortCondition := bearishSweep
+
+
+// ==================== Position Sizing & Risk Management ====================
+// Calculate position-specific stop loss and take profit using library functions
+var float longStopLoss = na
+var float longTakeProfit = na
+var float shortStopLoss = na
+var float shortTakeProfit = na
+
+if longCondition and strategy.position_size == 0
+    longStopLoss := lsd.getStopLoss(sweepPrice, true, atrMultiplier, atrLength)
+    longTakeProfit := lsd.getTakeProfit(close, longStopLoss, riskRewardRatio)
+
+if shortCondition and strategy.position_size == 0
+    shortStopLoss := lsd.getStopLoss(sweepPrice, false, atrMultiplier, atrLength)
+    shortTakeProfit := lsd.getTakeProfit(close, shortStopLoss, riskRewardRatio)
+
+
+// ==================== Execute Trades ====================
+// Enter long
+if longCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", "Long", stop=longStopLoss, limit=longTakeProfit)
+
+// Enter short
+if shortCondition and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", "Short", stop=shortStopLoss, limit=shortTakeProfit)
+
+// Trailing stop logic
+if useTrailingStop
+    if strategy.position_size > 0  // Long position
+        trailStop = close - ta.atr(atrLength) * trailingStopATR
+        strategy.exit("Long Trail", "Long", stop=trailStop, limit=longTakeProfit)
+    
+    if strategy.position_size < 0  // Short position
+        trailStop = close + ta.atr(atrLength) * trailingStopATR
+        strategy.exit("Short Trail", "Short", stop=trailStop, limit=shortTakeProfit)
+
+
+// ==================== Visualization ====================
+// Plot sweep detection signals
+plotshape(bullishSweep, "Bullish Sweep", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(bearishSweep, "Bearish Sweep", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+
+// Plot entry signals
+plotshape(longCondition, "Long Entry", shape.labelup, location.belowbar, color.new(color.lime, 0), text="LONG", size=size.normal)
+plotshape(shortCondition, "Short Entry", shape.labeldown, location.abovebar, color.new(color.fuchsia, 0), text="SHORT", size=size.normal)
+
+// Plot stop loss and take profit levels for active positions
+plot(strategy.position_size > 0 ? longStopLoss : na, "Long SL", color.red, 2, plot.style_linebr)
+plot(strategy.position_size > 0 ? longTakeProfit : na, "Long TP", color.green, 2, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortStopLoss : na, "Short SL", color.red, 2, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortTakeProfit : na, "Short TP", color.green, 2, plot.style_linebr)
+
+// Plot sweep price levels
+plot(not na(sweepPrice) ? sweepPrice : na, "Sweep Level", color.new(color.yellow, 0), 1, plot.style_circles)
+
+// Background color for confirmation waiting period
+bgcolor(waitingForBullConfirmation ? color.new(color.green, 90) : na, title="Waiting Bull Confirmation")
+bgcolor(waitingForBearConfirmation ? color.new(color.red, 90) : na, title="Waiting Bear Confirmation")

@@ -1,0 +1,118 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © YourUsername
+
+//@version=5
+
+// @description Library for detecting liquidity sweeps on any timeframe
+library("LiquiditySweepDetector", overlay=true)
+
+// @function Detects bullish liquidity sweeps (sweep below previous low and reversal)
+// @param lookback Number of bars to look back for swing lows
+// @param atrMultiplier ATR multiplier for sweep threshold
+// @param atrLength ATR period length
+// @returns [isBullishSweep, sweepPrice] Tuple indicating if bullish sweep occurred and the sweep price
+export detectBullishSweep(int lookback = 20, float atrMultiplier = 0.5, int atrLength = 14) =>
+    // Find the lowest low in lookback period
+    lowestLow = ta.lowest(low, lookback)
+    
+    // Calculate ATR for volatility-based threshold
+    atrValue = ta.atr(atrLength)
+    
+    // Detect if current candle went below the lowest low (sweep)
+    // and closed back above it (failed breakdown = liquidity sweep)
+    sweepOccurred = low < lowestLow[1] and close > lowestLow[1]
+    
+    // Additional confirmation: close should be in upper half of candle
+    bullishClose = close > (high + low) / 2
+    
+    // Strong reversal confirmation
+    isBullishSweep = sweepOccurred and bullishClose
+    
+    [isBullishSweep, lowestLow[1]]
+
+
+// @function Detects bearish liquidity sweeps (sweep above previous high and reversal)
+// @param lookback Number of bars to look back for swing highs
+// @param atrMultiplier ATR multiplier for sweep threshold
+// @param atrLength ATR period length
+// @returns [isBearishSweep, sweepPrice] Tuple indicating if bearish sweep occurred and the sweep price
+export detectBearishSweep(int lookback = 20, float atrMultiplier = 0.5, int atrLength = 14) =>
+    // Find the highest high in lookback period
+    highestHigh = ta.highest(high, lookback)
+    
+    // Calculate ATR for volatility-based threshold
+    atrValue = ta.atr(atrLength)
+    
+    // Detect if current candle went above the highest high (sweep)
+    // and closed back below it (failed breakout = liquidity sweep)
+    sweepOccurred = high > highestHigh[1] and close < highestHigh[1]
+    
+    // Additional confirmation: close should be in lower half of candle
+    bearishClose = close < (high + low) / 2
+    
+    // Strong reversal confirmation
+    isBearishSweep = sweepOccurred and bearishClose
+    
+    [isBearishSweep, highestHigh[1]]
+
+
+// @function Advanced liquidity sweep detection with pivot points
+// @param leftBars Number of bars to the left for pivot
+// @param rightBars Number of bars to the right for pivot
+// @param sweepThreshold Percentage threshold for sweep detection
+// @returns [bullishSweep, bearishSweep, sweepLevel] Detection signals and price level
+export detectPivotBasedSweep(int leftBars = 10, int rightBars = 5, float sweepThreshold = 0.001) =>
+    // Detect swing lows (potential liquidity pools)
+    swingLow = ta.pivotlow(low, leftBars, rightBars)
+    var float lastSwingLow = na
+    
+    if not na(swingLow)
+        lastSwingLow := swingLow
+    
+    // Detect swing highs (potential liquidity pools)
+    swingHigh = ta.pivothigh(high, leftBars, rightBars)
+    var float lastSwingHigh = na
+    
+    if not na(swingHigh)
+        lastSwingHigh := swingHigh
+    
+    // Bullish sweep: price sweeps below swing low and reverses
+    bullishSweep = false
+    if not na(lastSwingLow)
+        priceSweptBelow = low <= lastSwingLow * (1 - sweepThreshold)
+        reversedUp = close > lastSwingLow
+        bullishSweep := priceSweptBelow and reversedUp
+    
+    // Bearish sweep: price sweeps above swing high and reverses
+    bearishSweep = false
+    if not na(lastSwingHigh)
+        priceSweptAbove = high >= lastSwingHigh * (1 + sweepThreshold)
+        reversedDown = close < lastSwingHigh
+        bearishSweep := priceSweptAbove and reversedDown
+    
+    sweepLevel = bullishSweep ? lastSwingLow : bearishSweep ? lastSwingHigh : na
+    
+    [bullishSweep, bearishSweep, sweepLevel]
+
+
+// @function Get recommended stop loss level based on sweep
+// @param sweepPrice The price level where sweep occurred
+// @param isBullish True for bullish sweep, false for bearish
+// @param atrMultiplier ATR multiplier for stop distance
+// @param atrLength ATR period
+// @returns Recommended stop loss price
+export getStopLoss(float sweepPrice, bool isBullish, float atrMultiplier = 1.5, int atrLength = 14) =>
+    atrValue = ta.atr(atrLength)
+    stopLoss = isBullish ? sweepPrice - (atrValue * atrMultiplier) : sweepPrice + (atrValue * atrMultiplier)
+    stopLoss
+
+
+// @function Get recommended take profit level based on risk-reward ratio
+// @param entryPrice Entry price for the trade
+// @param stopLoss Stop loss price
+// @param riskRewardRatio Desired risk-reward ratio (e.g., 2 for 1:2)
+// @returns Recommended take profit price
+export getTakeProfit(float entryPrice, float stopLoss, float riskRewardRatio = 2.0) =>
+    riskDistance = math.abs(entryPrice - stopLoss)
+    takeProfit = entryPrice + (riskDistance * riskRewardRatio * (entryPrice > stopLoss ? 1 : -1))
+    takeProfit

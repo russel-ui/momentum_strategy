@@ -1,0 +1,205 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © YourUsername
+
+//@version=5
+
+// ============================================================================
+// STEP 1: Change 'indicator' to 'library' and give it a unique name
+// ============================================================================
+// Before: indicator("My Indicator", overlay=true)
+// After:  library("MyIndicatorLib", overlay=true)
+
+library("MyLiquiditySweepLib", overlay=true)
+
+
+// ============================================================================
+// STEP 2: Convert your indicator logic into exportable functions
+// ============================================================================
+// - Add 'export' keyword before function definitions
+// - Return values instead of plotting
+// - Remove all plot(), plotshape(), bgcolor(), label.new(), line.new() etc.
+// - Keep the core calculation logic
+
+
+// Example: Converting a simple liquidity sweep detection
+
+// BEFORE (in your indicator):
+// ---------------------------------
+// bullSweep = low < ta.lowest(low, 20)[1] and close > open
+// plotshape(bullSweep, "Bull", shape.triangleup, location.belowbar, color.green)
+
+
+// AFTER (in your library):
+// ---------------------------------
+
+// @function Detects your custom liquidity sweep pattern
+// @param lookback Number of bars to look back
+// @param requireBullishClose Whether close must be above open
+// @returns [isBullSweep, sweepLevel] Boolean signal and price level
+export detectMyCustomSweep(int lookback = 20, bool requireBullishClose = true) =>
+    // Your original detection logic
+    lowestLevel = ta.lowest(low, lookback)[1]
+    priceSweptBelow = low < lowestLevel
+    priceReversed = close > lowestLevel
+    
+    // Additional confirmation if required
+    bullishCandle = requireBullishClose ? close > open : true
+    
+    // Combine conditions
+    isBullSweep = priceSweptBelow and priceReversed and bullishCandle
+    
+    // Return the signal and the level (NOT plot it)
+    [isBullSweep, lowestLevel]
+
+
+// ============================================================================
+// STEP 3: Export additional helper functions you need
+// ============================================================================
+
+// Example: Export volume confirmation
+// @function Checks if current volume is above average
+// @param volumePeriod Number of bars for volume average
+// @param multiplier Volume multiplier threshold
+// @returns True if volume is above threshold
+export hasHighVolume(int volumePeriod = 20, float multiplier = 1.5) =>
+    avgVolume = ta.sma(volume, volumePeriod)
+    volume > avgVolume * multiplier
+
+
+// Example: Export trend filter
+// @function Determines if market is in uptrend
+// @param maPeriod Moving average period
+// @returns True if price is above MA
+export isUptrend(int maPeriod = 50) =>
+    ma = ta.sma(close, maPeriod)
+    close > ma
+
+
+// Example: Export your custom stop loss calculation
+// @function Calculates stop loss based on your method
+// @param entry Entry price
+// @param isBullish True for long, false for short
+// @param atrMultiplier ATR-based stop distance
+// @returns Stop loss price level
+export calculateStopLoss(float entry, bool isBullish, float atrMultiplier = 1.5) =>
+    atr = ta.atr(14)
+    stopLoss = isBullish ? entry - (atr * atrMultiplier) : entry + (atr * atrMultiplier)
+    stopLoss
+
+
+// ============================================================================
+// STEP 4: Test your library before publishing
+// ============================================================================
+// Create a simple test strategy (see below) to verify functions work correctly
+
+
+// ============================================================================
+// TIPS FOR CONVERTING YOUR INDICATOR
+// ============================================================================
+//
+// 1. WHAT TO KEEP:
+//    - All calculation logic
+//    - All variable declarations
+//    - All conditional statements
+//    - All technical indicators (ta.xxx functions)
+//    - All math operations
+//
+// 2. WHAT TO REMOVE:
+//    - plot(), plotshape(), plotchar(), plotcandle(), plotarrow()
+//    - bgcolor(), barcolor()
+//    - label.new(), box.new(), line.new()
+//    - hline(), fill()
+//    - alertcondition() (put these in your strategy instead)
+//
+// 3. WHAT TO CHANGE:
+//    - indicator() → library()
+//    - Add 'export' before functions you want to use in strategies
+//    - Return values instead of plotting them
+//    - Add @function, @param, @returns documentation
+//
+// 4. BEST PRACTICES:
+//    - Use descriptive function names
+//    - Add default parameter values
+//    - Return tuples for multiple values: [value1, value2, value3]
+//    - Document what each function does
+//    - Keep functions focused (one task per function)
+//    - Test thoroughly before publishing
+//
+// 5. EXAMPLE RETURN PATTERNS:
+//    - Single value: return bullSweep
+//    - Multiple values: return [bullSweep, bearSweep, sweepLevel]
+//    - Complex data: return [signal, price, strength, confidence]
+//
+// ============================================================================
+
+
+// ============================================================================
+// EXAMPLE: Your current indicator might look like this
+// ============================================================================
+/*
+//@version=5
+indicator("My Sweep Detector", overlay=true)
+
+// Settings
+lookback = input.int(20, "Lookback")
+showLabels = input.bool(true, "Show Labels")
+
+// Detection
+lowestLow = ta.lowest(low, lookback)
+highestHigh = ta.highest(high, lookback)
+
+bullSweep = low < lowestLow[1] and close > lowestLow[1]
+bearSweep = high > highestHigh[1] and close < highestHigh[1]
+
+// Visualization
+plotshape(bullSweep, "Bull", shape.triangleup, location.belowbar, color.green)
+plotshape(bearSweep, "Bear", shape.triangledown, location.abovebar, color.red)
+
+if bullSweep and showLabels
+    label.new(bar_index, low, "BUY", style=label.style_label_up, color=color.green)
+*/
+
+// ============================================================================
+// CONVERT IT TO THIS LIBRARY:
+// ============================================================================
+
+// @function Main detection function combining all your logic
+// @param lookback Number of bars for sweep detection
+// @param requireVolumeConfirmation Whether to require high volume
+// @returns [bullSweep, bearSweep, bullLevel, bearLevel] Complete signal data
+export detectLiquiditySweep(int lookback = 20, bool requireVolumeConfirmation = false) =>
+    // Core detection logic (same as indicator)
+    lowestLow = ta.lowest(low, lookback)
+    highestHigh = ta.highest(high, lookback)
+    
+    bullSweep = low < lowestLow[1] and close > lowestLow[1]
+    bearSweep = high > highestHigh[1] and close < highestHigh[1]
+    
+    // Optional volume confirmation
+    if requireVolumeConfirmation
+        hasVolume = hasHighVolume(20, 1.5)  // Use another exported function
+        bullSweep := bullSweep and hasVolume
+        bearSweep := bearSweep and hasVolume
+    
+    // Return all relevant data (don't plot it)
+    [bullSweep, bearSweep, lowestLow[1], highestHigh[1]]
+
+
+// ============================================================================
+// AFTER CONVERTING: PUBLISH YOUR LIBRARY
+// ============================================================================
+// 1. Copy this entire file
+// 2. Open TradingView Pine Editor
+// 3. Paste the code
+// 4. Click "Publish Script"
+// 5. Choose "Public Library" or "Invite-only Library"
+// 6. Fill in description
+// 7. Publish!
+// 8. Note the version number (starts at 1)
+//
+// Then use it in your strategy like this:
+//
+// import YourUsername/MyLiquiditySweepLib/1 as sweep
+// [bull, bear, bullLevel, bearLevel] = sweep.detectLiquiditySweep(20, true)
+//
+// ============================================================================

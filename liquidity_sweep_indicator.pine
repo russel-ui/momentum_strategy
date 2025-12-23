@@ -1,0 +1,153 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © YourUsername
+
+//@version=5
+indicator("Liquidity Sweep Detector (4H)", overlay=true)
+
+// ==================== Input Parameters ====================
+// Detection Method
+detectionMethod = input.string("Pivot-Based", "Detection Method", options=["Pivot-Based", "Simple Lookback"], group="Method")
+
+// Pivot-Based Settings
+pivotLeft = input.int(10, "Pivot Left Bars", minval=1, maxval=50, group="Pivot Settings")
+pivotRight = input.int(5, "Pivot Right Bars", minval=1, maxval=50, group="Pivot Settings")
+sweepThreshold = input.float(0.001, "Sweep Threshold %", minval=0.0001, maxval=0.01, step=0.0001, group="Pivot Settings")
+
+// Simple Lookback Settings
+lookbackPeriod = input.int(20, "Lookback Period", minval=5, maxval=100, group="Simple Lookback")
+
+// General Settings
+atrLength = input.int(14, "ATR Length", minval=1, group="General")
+showLabels = input.bool(true, "Show Labels", group="Visual")
+showSweepLevels = input.bool(true, "Show Sweep Levels", group="Visual")
+showSupportResistance = input.bool(true, "Show Support/Resistance Lines", group="Visual")
+
+// ==================== Pivot-Based Detection ====================
+// Detect swing lows (potential liquidity pools)
+swingLow = ta.pivotlow(low, pivotLeft, pivotRight)
+var float lastSwingLow = na
+var int lastSwingLowBar = na
+
+if not na(swingLow)
+    lastSwingLow := swingLow
+    lastSwingLowBar := bar_index - pivotRight
+
+// Detect swing highs (potential liquidity pools)
+swingHigh = ta.pivothigh(high, pivotLeft, pivotRight)
+var float lastSwingHigh = na
+var int lastSwingHighBar = na
+
+if not na(swingHigh)
+    lastSwingHigh := swingHigh
+    lastSwingHighBar := bar_index - pivotRight
+
+// Bullish sweep: price sweeps below swing low and reverses
+pivotBullSweep = false
+if not na(lastSwingLow)
+    priceSweptBelow = low <= lastSwingLow * (1 - sweepThreshold)
+    reversedUp = close > lastSwingLow
+    pivotBullSweep := priceSweptBelow and reversedUp
+
+// Bearish sweep: price sweeps above swing high and reverses
+pivotBearSweep = false
+if not na(lastSwingHigh)
+    priceSweptAbove = high >= lastSwingHigh * (1 + sweepThreshold)
+    reversedDown = close < lastSwingHigh
+    pivotBearSweep := priceSweptAbove and reversedDown
+
+// ==================== Simple Lookback Detection ====================
+// Find the lowest low in lookback period
+lowestLow = ta.lowest(low, lookbackPeriod)
+
+// Detect if current candle went below the lowest low and closed back above it
+simpleBullSweep = low < lowestLow[1] and close > lowestLow[1] and close > (high + low) / 2
+
+// Find the highest high in lookback period
+highestHigh = ta.highest(high, lookbackPeriod)
+
+// Detect if current candle went above the highest high and closed back below it
+simpleBearSweep = high > highestHigh[1] and close < highestHigh[1] and close < (high + low) / 2
+
+// ==================== Select Detection Method ====================
+bullishSweep = detectionMethod == "Pivot-Based" ? pivotBullSweep : simpleBullSweep
+bearishSweep = detectionMethod == "Pivot-Based" ? pivotBearSweep : simpleBearSweep
+
+// ==================== Calculate Levels ====================
+atrValue = ta.atr(atrLength)
+
+// Stop loss levels
+bullStopLoss = bullishSweep ? (detectionMethod == "Pivot-Based" ? lastSwingLow - atrValue * 1.5 : lowestLow[1] - atrValue * 1.5) : na
+bearStopLoss = bearishSweep ? (detectionMethod == "Pivot-Based" ? lastSwingHigh + atrValue * 1.5 : highestHigh[1] + atrValue * 1.5) : na
+
+// Take profit levels (2:1 risk-reward)
+bullTakeProfit = na(bullStopLoss) ? na : close + math.abs(close - bullStopLoss) * 2
+bearTakeProfit = na(bearStopLoss) ? na : close - math.abs(close - bearStopLoss) * 2
+
+// ==================== Visualization ====================
+// Plot bullish sweep signals
+plotshape(bullishSweep and showLabels, "Bullish Sweep", shape.triangleup, location.belowbar, 
+         color.new(color.green, 0), text="🟢", size=size.small)
+
+// Plot bearish sweep signals
+plotshape(bearishSweep and showLabels, "Bearish Sweep", shape.triangledown, location.abovebar, 
+         color.new(color.red, 0), text="🔴", size=size.small)
+
+// Plot sweep levels
+plot(showSweepLevels and bullishSweep ? (detectionMethod == "Pivot-Based" ? lastSwingLow : lowestLow[1]) : na, 
+     "Bull Sweep Level", color.new(color.green, 50), 2, plot.style_circles)
+
+plot(showSweepLevels and bearishSweep ? (detectionMethod == "Pivot-Based" ? lastSwingHigh : highestHigh[1]) : na, 
+     "Bear Sweep Level", color.new(color.red, 50), 2, plot.style_circles)
+
+// Plot support/resistance lines
+var line bullLine = na
+var line bearLine = na
+
+if showSupportResistance
+    if bullishSweep
+        sweepLevel = detectionMethod == "Pivot-Based" ? lastSwingLow : lowestLow[1]
+        if not na(sweepLevel)
+            bullLine := line.new(bar_index, sweepLevel, bar_index + 10, sweepLevel, 
+                         color=color.new(color.green, 30), width=2, style=line.style_dashed)
+    
+    if bearishSweep
+        sweepLevel = detectionMethod == "Pivot-Based" ? lastSwingHigh : highestHigh[1]
+        if not na(sweepLevel)
+            bearLine := line.new(bar_index, sweepLevel, bar_index + 10, sweepLevel, 
+                         color=color.new(color.red, 30), width=2, style=line.style_dashed)
+
+// Draw labels with trade information
+if showLabels and bullishSweep
+    labelText = "BULLISH SWEEP\n" + 
+                "Entry: " + str.tostring(close, format.mintick) + "\n" + 
+                "SL: " + str.tostring(bullStopLoss, format.mintick) + "\n" + 
+                "TP: " + str.tostring(bullTakeProfit, format.mintick)
+    
+    label.new(bar_index, low, labelText, 
+              color=color.new(color.green, 20), 
+              textcolor=color.white, 
+              style=label.style_label_up,
+              size=size.normal)
+
+if showLabels and bearishSweep
+    labelText = "BEARISH SWEEP\n" + 
+                "Entry: " + str.tostring(close, format.mintick) + "\n" + 
+                "SL: " + str.tostring(bearStopLoss, format.mintick) + "\n" + 
+                "TP: " + str.tostring(bearTakeProfit, format.mintick)
+    
+    label.new(bar_index, high, labelText, 
+              color=color.new(color.red, 20), 
+              textcolor=color.white, 
+              style=label.style_label_down,
+              size=size.normal)
+
+// Background color for sweep detection
+bgcolor(bullishSweep ? color.new(color.green, 95) : na, title="Bullish Sweep BG")
+bgcolor(bearishSweep ? color.new(color.red, 95) : na, title="Bearish Sweep BG")
+
+// Plot ATR for reference
+plot(atrValue, "ATR", color=color.new(color.blue, 70), display=display.data_window)
+
+// ==================== Alerts ====================
+alertcondition(bullishSweep, title="Bullish Liquidity Sweep", message="🟢 Bullish liquidity sweep detected on {{ticker}} - 4H timeframe")
+alertcondition(bearishSweep, title="Bearish Liquidity Sweep", message="🔴 Bearish liquidity sweep detected on {{ticker}} - 4H timeframe")

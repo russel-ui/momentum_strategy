@@ -222,7 +222,11 @@ bullishClose = closePosition >= closeThreshold
 
 aboveSMA = close > sma35
 
-bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA
+// NEW: Low must be within 5 ATRs of the 35 SMA
+
+lowNearSMA = math.abs(low - sma35) <= (5 * atr5)
+
+bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA and lowNearSMA
 
 bullishMultiSweep = bullishSetup and isMultiSweepLow
 
@@ -234,7 +238,11 @@ bearishClose = closePosition <= (1 - closeThreshold)
 
 belowSMA = close < sma35
 
-bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA
+// NEW: High must be within 5 ATRs of the 35 SMA
+
+highNearSMA = math.abs(high - sma35) <= (5 * atr5)
+
+bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA and highNearSMA
 
 bearishMultiSweep = bearishSetup and isMultiSweepHigh
 

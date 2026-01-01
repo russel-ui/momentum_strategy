@@ -2,7 +2,8 @@
 
 //@version=5
 
-strategy("Sweep Strategy", shorttitle="Sweep Strategy", overlay=true, max_labels_count=500, max_boxes_count=500)
+strategy("Sweep Strategy", shorttitle="Sweep Strategy", overlay=true, max_labels_count=500, max_boxes_count=500, 
+     initial_capital=100000, default_qty_type=strategy.cash, default_qty_value=1000, commission_type=strategy.commission.percent, commission_value=0.1)
 
 
 
@@ -33,6 +34,9 @@ multiSweepMinCount = input.int(2, "Multi-Sweep Min Count", minval=2, maxval=10, 
 // Risk Management
 
 riskPercentage = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=100, step=0.1, group="Risk Management", tooltip="Percentage of equity to risk per trade")
+
+contractMultiplier = input.float(1.0, "Contract/Share Multiplier", minval=0.01, step=0.01, group="Risk Management", 
+     tooltip="For S&P futures use 50, for forex use 100000, for stocks use 1. This is the dollar value per point move.")
 
 
 
@@ -374,11 +378,15 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+    // Position size = Risk Amount / (Stop Distance × Contract Multiplier)
+
+    positionSize = (riskAmount > 0 and contractMultiplier > 0) ? accountRisk / (riskAmount * contractMultiplier) : 0
+
+    positionValue = positionSize * bullishEntryPrice * contractMultiplier
 
     
 
-    if open <= bullishSignalClose
+    if open <= bullishSignalClose and positionSize > 0
 
         // Opens at or below last close -> Market order
 
@@ -396,7 +404,7 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bullishSignalClose := na
 
-    else if open > bullishSignalClose
+    else if open > bullishSignalClose and positionSize > 0
 
         // Opens above last close -> Limit order (wait for retrace)
 
@@ -432,11 +440,15 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+    // Position size = Risk Amount / (Stop Distance × Contract Multiplier)
+
+    positionSize = (riskAmount > 0 and contractMultiplier > 0) ? accountRisk / (riskAmount * contractMultiplier) : 0
+
+    positionValue = positionSize * bearishEntryPrice * contractMultiplier
 
     
 
-    if open >= bearishSignalClose
+    if open >= bearishSignalClose and positionSize > 0
 
         // Opens at or above last close -> Market order
 
@@ -454,7 +466,7 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bearishSignalClose := na
 
-    else if open < bearishSignalClose
+    else if open < bearishSignalClose and positionSize > 0
 
         // Opens below last close -> Limit order (wait for retrace)
 

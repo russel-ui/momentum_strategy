@@ -30,6 +30,22 @@ multiSweepMinCount = input.int(2, "Multi-Sweep Min Count", minval=2, maxval=10, 
 
 
 
+// Risk Management
+
+riskPercentage = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=100, step=0.1, group="Risk Management", tooltip="Percentage of equity to risk per trade")
+
+
+
+// Backtesting Period
+
+useBacktestPeriod = input.bool(true, "Use Backtesting Period", group="Backtesting Period")
+
+startDate = input.time(timestamp("2020-01-01 00:00"), "Start Date", group="Backtesting Period")
+
+endDate = input.time(timestamp("2099-12-31 23:59"), "End Date", group="Backtesting Period")
+
+
+
 // Colors
 
 bullishColor = input.color(color.green, "Bullish Color")
@@ -286,6 +302,12 @@ bearishMultiSweep = bearishSetup and isMultiSweepHigh
 
 
 
+// Check if we're within backtesting period
+
+inBacktestPeriod = useBacktestPeriod ? (time >= startDate and time <= endDate) : true
+
+
+
 // Variables to track pending signals
 
 var float bullishEntryPrice = na
@@ -310,7 +332,7 @@ var float bearishSignalClose = na
 
 // Detect new bullish signal
 
-if bullishSetup and not bullishPending and strategy.position_size == 0
+if bullishSetup and not bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     bullishEntryPrice := close
 
@@ -324,7 +346,7 @@ if bullishSetup and not bullishPending and strategy.position_size == 0
 
 // Detect new bearish signal
 
-if bearishSetup and not bearishPending and strategy.position_size == 0
+if bearishSetup and not bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     bearishEntryPrice := close
 
@@ -338,21 +360,29 @@ if bearishSetup and not bearishPending and strategy.position_size == 0
 
 // Process pending bullish signal on next candle
 
-if bullishPending and strategy.position_size == 0
+if bullishPending and strategy.position_size == 0 and inBacktestPeriod
+
+    riskAmount = bullishEntryPrice - bullishStopLoss
+
+    targetMultiplier = sma35 > sma150 ? 2.5 : 1.2
+
+    targetPrice = bullishEntryPrice + (riskAmount * targetMultiplier)
+
+    
+
+    // Calculate position size based on 1% risk
+
+    accountRisk = strategy.equity * (riskPercentage / 100)
+
+    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+
+    
 
     if open <= bullishSignalClose
 
         // Opens at or below last close -> Market order
 
-        riskAmount = bullishEntryPrice - bullishStopLoss
-
-        targetMultiplier = sma35 > sma150 ? 2.5 : 1.2
-
-        targetPrice = bullishEntryPrice + (riskAmount * targetMultiplier)
-
-        
-
-        strategy.entry("Long", strategy.long)
+        strategy.entry("Long", strategy.long, qty=positionSize)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -370,15 +400,7 @@ if bullishPending and strategy.position_size == 0
 
         // Opens above last close -> Limit order (wait for retrace)
 
-        riskAmount = bullishEntryPrice - bullishStopLoss
-
-        targetMultiplier = sma35 > sma150 ? 2.5 : 1.2
-
-        targetPrice = bullishEntryPrice + (riskAmount * targetMultiplier)
-
-        
-
-        strategy.entry("Long", strategy.long, limit=bullishEntryPrice)
+        strategy.entry("Long", strategy.long, qty=positionSize, limit=bullishEntryPrice)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -396,21 +418,29 @@ if bullishPending and strategy.position_size == 0
 
 // Process pending bearish signal on next candle
 
-if bearishPending and strategy.position_size == 0
+if bearishPending and strategy.position_size == 0 and inBacktestPeriod
+
+    riskAmount = bearishStopLoss - bearishEntryPrice
+
+    targetMultiplier = sma35 < sma150 ? 2.5 : 1.2
+
+    targetPrice = bearishEntryPrice - (riskAmount * targetMultiplier)
+
+    
+
+    // Calculate position size based on 1% risk
+
+    accountRisk = strategy.equity * (riskPercentage / 100)
+
+    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+
+    
 
     if open >= bearishSignalClose
 
         // Opens at or above last close -> Market order
 
-        riskAmount = bearishStopLoss - bearishEntryPrice
-
-        targetMultiplier = sma35 < sma150 ? 2.5 : 1.2
-
-        targetPrice = bearishEntryPrice - (riskAmount * targetMultiplier)
-
-        
-
-        strategy.entry("Short", strategy.short)
+        strategy.entry("Short", strategy.short, qty=positionSize)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 
@@ -428,15 +458,7 @@ if bearishPending and strategy.position_size == 0
 
         // Opens below last close -> Limit order (wait for retrace)
 
-        riskAmount = bearishStopLoss - bearishEntryPrice
-
-        targetMultiplier = sma35 < sma150 ? 2.5 : 1.2
-
-        targetPrice = bearishEntryPrice - (riskAmount * targetMultiplier)
-
-        
-
-        strategy.entry("Short", strategy.short, limit=bearishEntryPrice)
+        strategy.entry("Short", strategy.short, qty=positionSize, limit=bearishEntryPrice)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 

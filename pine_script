@@ -226,7 +226,11 @@ aboveSMA = close > sma35
 
 lowNearSMA = math.abs(low - sma35) <= atr5
 
-bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA and lowNearSMA
+// NEW: Only allow sweeps of 1 or 2 lows (not more than 2)
+
+validLowSweep = lowsSwept <= 2
+
+bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA and lowNearSMA and validLowSweep
 
 bullishMultiSweep = bullishSetup and isMultiSweepLow
 
@@ -242,7 +246,11 @@ belowSMA = close < sma35
 
 highNearSMA = math.abs(high - sma35) <= atr5
 
-bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA and highNearSMA
+// NEW: Only allow sweeps of 1 or 2 highs (not more than 2)
+
+validHighSweep = highsSwept <= 2
+
+bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA and highNearSMA and validHighSweep
 
 bearishMultiSweep = bearishSetup and isMultiSweepHigh
 

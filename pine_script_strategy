@@ -35,8 +35,8 @@ multiSweepMinCount = input.int(2, "Multi-Sweep Min Count", minval=2, maxval=10, 
 
 riskPercentage = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=100, step=0.1, group="Risk Management", tooltip="Percentage of equity to risk per trade")
 
-contractMultiplier = input.float(1.0, "Contract/Share Multiplier", minval=0.01, step=0.01, group="Risk Management", 
-     tooltip="For S&P futures use 50, for forex use 100000, for stocks use 1. This is the dollar value per point move.")
+// Removed Contract Multiplier - not needed for most CFD/Forex instruments
+// TradingView automatically handles point values for standard symbols
 
 
 
@@ -396,11 +396,11 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = (Risk Amount × Contract Multiplier) / Stop Distance
+    // Position size = Risk Amount / Stop Distance (in points)
 
-    // This multiplies position by the multiplier so TradingView's P&L calculation works correctly
+    // TradingView will automatically apply the correct point value for the symbol
 
-    positionSize = (riskAmount > 0) ? (accountRisk * contractMultiplier) / riskAmount : 0
+    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
 
     positionValue = positionSize * bullishEntryPrice
 
@@ -460,11 +460,11 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = (Risk Amount × Contract Multiplier) / Stop Distance
+    // Position size = Risk Amount / Stop Distance (in points)
 
-    // This multiplies position by the multiplier so TradingView's P&L calculation works correctly
+    // TradingView will automatically apply the correct point value for the symbol
 
-    positionSize = (riskAmount > 0) ? (accountRisk * contractMultiplier) / riskAmount : 0
+    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
 
     positionValue = positionSize * bearishEntryPrice
 

@@ -3,7 +3,7 @@
 //@version=5
 
 strategy("Sweep Strategy", shorttitle="Sweep Strategy", overlay=true, max_labels_count=500, max_boxes_count=500, 
-     initial_capital=100000, default_qty_type=strategy.fixed, commission_type=strategy.commission.percent, commission_value=0.1)
+     initial_capital=100000, default_qty_type=strategy.cash, commission_type=strategy.commission.percent, commission_value=0.1)
 
 
 
@@ -404,15 +404,21 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+    // Calculate position size in DOLLARS (cash value)
+
+    // Risk per point = accountRisk / riskAmount
+
+    // Position value = (Risk per point) × Entry price
+
+    positionSizeCash = riskAmount > 0 ? (accountRisk / riskAmount) * actualEntry : 0
 
     
 
-    if open <= bullishSignalClose and positionSize > 0
+    if open <= bullishSignalClose and positionSizeCash > 0
 
         // Opens at or below last close -> Market order at open
 
-        strategy.entry("Long", strategy.long, qty=positionSize)
+        strategy.entry("Long", strategy.long, qty=positionSizeCash)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -426,11 +432,11 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bullishSignalClose := na
 
-    else if open > bullishSignalClose and positionSize > 0
+    else if open > bullishSignalClose and positionSizeCash > 0
 
         // Opens above last close -> Limit order (wait for retrace)
 
-        strategy.entry("Long", strategy.long, qty=positionSize, limit=bullishEntryPrice)
+        strategy.entry("Long", strategy.long, qty=positionSizeCash, limit=bullishEntryPrice)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -470,15 +476,21 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
+    // Calculate position size in DOLLARS (cash value)
+
+    // Risk per point = accountRisk / riskAmount
+
+    // Position value = (Risk per point) × Entry price
+
+    positionSizeCash = riskAmount > 0 ? (accountRisk / riskAmount) * actualEntry : 0
 
     
 
-    if open >= bearishSignalClose and positionSize > 0
+    if open >= bearishSignalClose and positionSizeCash > 0
 
         // Opens at or above last close -> Market order at open
 
-        strategy.entry("Short", strategy.short, qty=positionSize)
+        strategy.entry("Short", strategy.short, qty=positionSizeCash)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 
@@ -492,11 +504,11 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bearishSignalClose := na
 
-    else if open < bearishSignalClose and positionSize > 0
+    else if open < bearishSignalClose and positionSizeCash > 0
 
         // Opens below last close -> Limit order (wait for retrace)
 
-        strategy.entry("Short", strategy.short, qty=positionSize, limit=bearishEntryPrice)
+        strategy.entry("Short", strategy.short, qty=positionSizeCash, limit=bearishEntryPrice)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 

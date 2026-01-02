@@ -56,6 +56,16 @@ sma150DarkRed = input.color(color.new(#8B0000, 0), "150 SMA Bearish", group="SMA
 
 
 
+// Time Filter
+
+useTimeFilter = input.bool(true, "Use Time Filter", group="Time Filter", tooltip="Ignore signals during specified hours")
+
+excludeStartHour = input.int(13, "Exclude Start Hour", minval=0, maxval=23, group="Time Filter", tooltip="Start hour to exclude signals (24-hour format, exchange timezone)")
+
+excludeEndHour = input.int(21, "Exclude End Hour", minval=0, maxval=23, group="Time Filter", tooltip="End hour to exclude signals (24-hour format, exchange timezone)")
+
+
+
 // ══════════════════════════════════════════════════════════════════════════════
 
 // CALCULATIONS
@@ -150,6 +160,14 @@ sma150Color = close > sma150 ? sma150DarkGreen : sma150DarkRed
 
 
 
+// Time filter check
+
+currentHour = hour(time, syminfo.timezone)
+
+isInExcludedTime = useTimeFilter ? (currentHour >= excludeStartHour and currentHour < excludeEndHour) : false
+
+
+
 // ══════════════════════════════════════════════════════════════════════════════
 
 // MULTI-SWEEP DETECTION (DISTINCT SWING POINTS)
@@ -230,7 +248,7 @@ lowNearSMA = math.abs(low - sma35) <= atr5
 
 validLowSweep = lowsSwept <= 2
 
-bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA and lowNearSMA and validLowSweep
+bullishSetup = sweepsLow and validSize and bullishClose and aboveSMA and lowNearSMA and validLowSweep and not isInExcludedTime
 
 bullishMultiSweep = bullishSetup and isMultiSweepLow
 
@@ -250,7 +268,7 @@ highNearSMA = math.abs(high - sma35) <= atr5
 
 validHighSweep = highsSwept <= 2
 
-bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA and highNearSMA and validHighSweep
+bearishSetup = sweepsHigh and validSize and bearishClose and belowSMA and highNearSMA and validHighSweep and not isInExcludedTime
 
 bearishMultiSweep = bearishSetup and isMultiSweepHigh
 

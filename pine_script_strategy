@@ -396,11 +396,13 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = Risk Amount / (Stop Distance × Contract Multiplier)
+    // Position size = (Risk Amount × Contract Multiplier) / Stop Distance
 
-    positionSize = (riskAmount > 0 and contractMultiplier > 0) ? accountRisk / (riskAmount * contractMultiplier) : 0
+    // This multiplies position by the multiplier so TradingView's P&L calculation works correctly
 
-    positionValue = positionSize * bullishEntryPrice * contractMultiplier
+    positionSize = (riskAmount > 0) ? (accountRisk * contractMultiplier) / riskAmount : 0
+
+    positionValue = positionSize * bullishEntryPrice
 
     
 
@@ -458,11 +460,13 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = Risk Amount / (Stop Distance × Contract Multiplier)
+    // Position size = (Risk Amount × Contract Multiplier) / Stop Distance
 
-    positionSize = (riskAmount > 0 and contractMultiplier > 0) ? accountRisk / (riskAmount * contractMultiplier) : 0
+    // This multiplies position by the multiplier so TradingView's P&L calculation works correctly
 
-    positionValue = positionSize * bearishEntryPrice * contractMultiplier
+    positionSize = (riskAmount > 0) ? (accountRisk * contractMultiplier) / riskAmount : 0
+
+    positionValue = positionSize * bearishEntryPrice
 
     
 

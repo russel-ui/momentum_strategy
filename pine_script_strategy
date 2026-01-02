@@ -384,31 +384,33 @@ if bearishSetup and not bearishPending and strategy.position_size == 0 and inBac
 
 if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
-    riskAmount = bullishEntryPrice - bullishStopLoss
+    // Determine actual entry price based on order type
 
-    targetMultiplier = sma35 > sma150 ? 2.5 : 1.2
-
-    targetPrice = bullishEntryPrice + (riskAmount * targetMultiplier)
+    actualEntry = open <= bullishSignalClose ? open : bullishEntryPrice
 
     
 
-    // Calculate position size based on 1% risk
+    // Recalculate risk and position size based on ACTUAL entry
+
+    riskAmount = actualEntry - bullishStopLoss
+
+    targetMultiplier = sma35 > sma150 ? 2.5 : 1.2
+
+    targetPrice = actualEntry + (riskAmount * targetMultiplier)
+
+    
+
+    // Calculate position size based on 1% risk using ACTUAL entry
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = Risk Amount / Stop Distance (in points)
-
-    // TradingView will automatically apply the correct point value for the symbol
-
     positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
-
-    positionValue = positionSize * bullishEntryPrice
 
     
 
     if open <= bullishSignalClose and positionSize > 0
 
-        // Opens at or below last close -> Market order
+        // Opens at or below last close -> Market order at open
 
         strategy.entry("Long", strategy.long, qty=positionSize)
 
@@ -448,31 +450,33 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
 if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
-    riskAmount = bearishStopLoss - bearishEntryPrice
+    // Determine actual entry price based on order type
 
-    targetMultiplier = sma35 < sma150 ? 2.5 : 1.2
-
-    targetPrice = bearishEntryPrice - (riskAmount * targetMultiplier)
+    actualEntry = open >= bearishSignalClose ? open : bearishEntryPrice
 
     
 
-    // Calculate position size based on 1% risk
+    // Recalculate risk and position size based on ACTUAL entry
+
+    riskAmount = bearishStopLoss - actualEntry
+
+    targetMultiplier = sma35 < sma150 ? 2.5 : 1.2
+
+    targetPrice = actualEntry - (riskAmount * targetMultiplier)
+
+    
+
+    // Calculate position size based on 1% risk using ACTUAL entry
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Position size = Risk Amount / Stop Distance (in points)
-
-    // TradingView will automatically apply the correct point value for the symbol
-
     positionSize = riskAmount > 0 ? accountRisk / riskAmount : 0
-
-    positionValue = positionSize * bearishEntryPrice
 
     
 
     if open >= bearishSignalClose and positionSize > 0
 
-        // Opens at or above last close -> Market order
+        // Opens at or above last close -> Market order at open
 
         strategy.entry("Short", strategy.short, qty=positionSize)
 

@@ -3,7 +3,7 @@
 //@version=5
 
 strategy("Sweep Strategy", shorttitle="Sweep Strategy", overlay=true, max_labels_count=500, max_boxes_count=500, 
-     initial_capital=100000, default_qty_type=strategy.cash, commission_type=strategy.commission.percent, commission_value=0.1)
+     initial_capital=100000, default_qty_type=strategy.fixed, commission_type=strategy.commission.percent, commission_value=0.1)
 
 
 
@@ -35,8 +35,8 @@ multiSweepMinCount = input.int(2, "Multi-Sweep Min Count", minval=2, maxval=10, 
 
 riskPercentage = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=100, step=0.1, group="Risk Management", tooltip="Percentage of equity to risk per trade")
 
-// Removed Contract Multiplier - not needed for most CFD/Forex instruments
-// TradingView automatically handles point values for standard symbols
+pointValue = input.float(1.0, "Point Value", minval=0.01, step=0.1, group="Risk Management", 
+     tooltip="How much $ each 1 point move is worth. Check your broker's contract specs. Usually $1 for SPX500USD CFDs.")
 
 
 
@@ -404,21 +404,17 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Calculate position size in DOLLARS (cash value)
+    // Contracts = dollar risk / (point risk × point value)
 
-    // Risk per point = accountRisk / riskAmount
-
-    // Position value = (Risk per point) × Entry price
-
-    positionSizeCash = riskAmount > 0 ? (accountRisk / riskAmount) * actualEntry : 0
+    positionSize = (riskAmount > 0 and pointValue > 0) ? accountRisk / (riskAmount * pointValue) : 0
 
     
 
-    if open <= bullishSignalClose and positionSizeCash > 0
+    if open <= bullishSignalClose and positionSize > 0
 
         // Opens at or below last close -> Market order at open
 
-        strategy.entry("Long", strategy.long, qty=positionSizeCash)
+        strategy.entry("Long", strategy.long, qty=positionSize)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -432,11 +428,11 @@ if bullishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bullishSignalClose := na
 
-    else if open > bullishSignalClose and positionSizeCash > 0
+    else if open > bullishSignalClose and positionSize > 0
 
         // Opens above last close -> Limit order (wait for retrace)
 
-        strategy.entry("Long", strategy.long, qty=positionSizeCash, limit=bullishEntryPrice)
+        strategy.entry("Long", strategy.long, qty=positionSize, limit=bullishEntryPrice)
 
         strategy.exit("Exit Long", "Long", stop=bullishStopLoss, limit=targetPrice)
 
@@ -476,21 +472,17 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
     accountRisk = strategy.equity * (riskPercentage / 100)
 
-    // Calculate position size in DOLLARS (cash value)
+    // Contracts = dollar risk / (point risk × point value)
 
-    // Risk per point = accountRisk / riskAmount
-
-    // Position value = (Risk per point) × Entry price
-
-    positionSizeCash = riskAmount > 0 ? (accountRisk / riskAmount) * actualEntry : 0
+    positionSize = (riskAmount > 0 and pointValue > 0) ? accountRisk / (riskAmount * pointValue) : 0
 
     
 
-    if open >= bearishSignalClose and positionSizeCash > 0
+    if open >= bearishSignalClose and positionSize > 0
 
         // Opens at or above last close -> Market order at open
 
-        strategy.entry("Short", strategy.short, qty=positionSizeCash)
+        strategy.entry("Short", strategy.short, qty=positionSize)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 
@@ -504,11 +496,11 @@ if bearishPending and strategy.position_size == 0 and inBacktestPeriod
 
         bearishSignalClose := na
 
-    else if open < bearishSignalClose and positionSizeCash > 0
+    else if open < bearishSignalClose and positionSize > 0
 
         // Opens below last close -> Limit order (wait for retrace)
 
-        strategy.entry("Short", strategy.short, qty=positionSizeCash, limit=bearishEntryPrice)
+        strategy.entry("Short", strategy.short, qty=positionSize, limit=bearishEntryPrice)
 
         strategy.exit("Exit Short", "Short", stop=bearishStopLoss, limit=targetPrice)
 

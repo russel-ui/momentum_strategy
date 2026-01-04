@@ -298,7 +298,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     
     // Add label showing percentage
     const pctText = Math.round(bullishPercent) + '%';
-    text(
+    Text(
       current_time,
       high_val,
       {
@@ -313,7 +313,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     // Multi-sweep marker
     if (bullishMultiSweep) {
       const sweepText = '★ ' + lowsSwept + ' lows';
-      text(
+      Text(
         current_time,
         bullBoxBot,
         {
@@ -393,7 +393,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     
     // Add label showing percentage
     const pctText = Math.round(bearishPercent) + '%';
-    text(
+    Text(
       current_time,
       low_val,
       {
@@ -408,7 +408,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     // Multi-sweep marker
     if (bearishMultiSweep) {
       const sweepText = '★ ' + highsSwept + ' highs';
-      text(
+      Text(
         current_time,
         bearBoxTop,
         {

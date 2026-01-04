@@ -10,15 +10,15 @@ All 21 errors in your FXR scripts have been fixed. Both scripts are now ready to
 
 ### What Was Wrong:
 1. ❌ Hex color strings (`"#FF00FF"`) instead of BaseColors (`color.fuchsia`)
-2. ❌ Wrong function names (`trendline` → should be `trendLine`)
-3. ❌ Wrong function signatures (parameter order for `text`)
+2. ❌ Wrong function names (`trendline` → `trendLine`, `text` → `Text`)
+3. ❌ Wrong function signatures (parameter order for `Text`)
 4. ❌ `new Date()` not allowed (used manual timestamp calculation)
 5. ❌ Parameter name shadowing (renamed to avoid conflicts)
 
 ### What Was Fixed:
 1. ✅ All colors converted to `color.lime`, `color.red`, `color.yellow`, etc.
 2. ✅ All `trendline` changed to `trendLine` with proper `newPoint()` calls
-3. ✅ All `text()` calls fixed with correct parameter order
+3. ✅ All `text()` changed to `Text()` (capital T) with correct parameter order
 4. ✅ Removed `new Date()`, using manual time calculation
 5. ✅ Function parameters renamed to avoid shadowing
 6. ✅ Created `createRgbaWithOpacity()` utility for transparent colors
@@ -157,6 +157,10 @@ If all above work → **Success!** 🎉
 **"Color still shows error"**
 → Make sure you copied the latest version
 → Check FXR platform supports `color.lime`, `color.red`, etc.
+
+**"Text not found"**
+→ Make sure you have the latest version with capital T
+→ FXR uses `Text()` not `text()`
 
 **"trendLine not found"**
 → FXR platform may use different name

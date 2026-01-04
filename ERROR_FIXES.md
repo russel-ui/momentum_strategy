@@ -64,11 +64,11 @@ FXR function names are **case-sensitive**:
 
 **Solution:**
 
-#### A. Text Function - Wrong Parameter Order
+#### A. Text Function - Wrong Name and Parameter Order
 
 ❌ **Before:**
 ```javascript
-text(
+text(               // Wrong: lowercase 't'
   current_time,
   high_val,
   pctText,           // Text as 3rd parameter
@@ -82,7 +82,7 @@ text(
 
 ✅ **After:**
 ```javascript
-text(
+Text(               // Correct: capital 'T'
   current_time,      // time
   high_val,          // price
   {                  // styles (3rd parameter)
@@ -94,7 +94,8 @@ text(
 );
 ```
 
-**Correct Signature:** `text(time, price, styles?, value?)`
+**Correct Signature:** `Text(time, price, styles?, value?)`
+**Note:** FXR uses `Text` with capital T, not lowercase `text`
 
 #### B. TrendLine Function - Wrong Name and Signature
 

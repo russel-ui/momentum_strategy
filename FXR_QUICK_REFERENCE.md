@@ -216,19 +216,19 @@ triangle(x1, y1, x2, y2, x3, y3, options);
 ### Text & Labels
 
 ```javascript
-// Text annotation
-text(x, y, content, options);
+// Text annotation (note: capital T)
+Text(time, price, styles, value);
 // Example:
-text(
+Text(
   time(0),
   high(0),
-  'Signal ▲',
   {
-    color: '#00FF00',
-    backgroundColor: '#00FF00',
-    textColor: '#FFFFFF',
+    color: color.lime,
+    backgroundColor: color.lime,
+    textColor: color.white,
     fontSize: 12
-  }
+  },
+  'Signal ▲'
 );
 
 // Note (anchored annotation)

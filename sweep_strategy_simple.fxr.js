@@ -82,7 +82,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     
     // Add label
     const pctText = Math.round(closePosition * 100) + '% ▲';
-    text(
+    Text(
       current_time,
       high_val,
       {
@@ -157,7 +157,7 @@ onTick = (length, _moment, _, ta, inputs) => {
     
     // Add label
     const pctText = Math.round((1 - closePosition) * 100) + '% ▼';
-    text(
+    Text(
       current_time,
       low_val,
       {

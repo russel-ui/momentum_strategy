@@ -22,18 +22,18 @@ init = () => {
   // Risk Management
   input.float('Risk Per Trade ($)', 1000, 'riskPerTrade');
   
-  // Colors
-  input.color('Bullish Color', '#00FF00', 'bullishColor');
-  input.color('Bearish Color', '#FF0000', 'bearishColor');
+  // Colors - using BaseColors
+  input.color('Bullish Color', color.lime, 'bullishColor');
+  input.color('Bearish Color', color.red, 'bearishColor');
   input.int('Box Opacity', 80, 'boxOpacity');
-  input.color('Multi-Sweep Bullish', '#FFD700', 'multiSweepBullColor');
-  input.color('Multi-Sweep Bearish', '#FF00FF', 'multiSweepBearColor');
+  input.color('Multi-Sweep Bullish', color.yellow, 'multiSweepBullColor');
+  input.color('Multi-Sweep Bearish', color.fuchsia, 'multiSweepBearColor');
   
   // SMA Colors
-  input.color('35 SMA Bullish', '#90EE90', 'sma35LightGreen');
-  input.color('35 SMA Bearish', '#FF6B6B', 'sma35LightRed');
-  input.color('150 SMA Bullish', '#006400', 'sma150DarkGreen');
-  input.color('150 SMA Bearish', '#8B0000', 'sma150DarkRed');
+  input.color('35 SMA Bullish', color.lime, 'sma35LightGreen');
+  input.color('35 SMA Bearish', color.red, 'sma35LightRed');
+  input.color('150 SMA Bullish', color.green, 'sma150DarkGreen');
+  input.color('150 SMA Bearish', color.maroon, 'sma150DarkRed');
   
   // Time Filter
   input.bool('Use Time Filter', true, 'useTimeFilter');
@@ -94,17 +94,17 @@ const getPipValue = (ticker, close) => {
 };
 
 // Count distinct lows swept
-const countDistinctLowsSwept = (lowArray, lookback) => {
-  if (lowArray.length < lookback + 1) return 0;
+const countDistinctLowsSwept = (lowArr, lookback) => {
+  if (lowArr.length < lookback + 1) return 0;
   
-  const currentLow = lowArray[lowArray.length - 1];
+  const currentLow = lowArr[lowArr.length - 1];
   let count = 0;
   let minLowSoFar = Infinity;
   
   for (let i = 1; i <= lookback; i++) {
-    const idx = lowArray.length - 1 - i;
+    const idx = lowArr.length - 1 - i;
     if (idx < 0) break;
-    const prevLow = lowArray[idx];
+    const prevLow = lowArr[idx];
     
     if (prevLow < minLowSoFar && currentLow < prevLow) {
       count++;
@@ -116,17 +116,17 @@ const countDistinctLowsSwept = (lowArray, lookback) => {
 };
 
 // Count distinct highs swept
-const countDistinctHighsSwept = (highArray, lookback) => {
-  if (highArray.length < lookback + 1) return 0;
+const countDistinctHighsSwept = (highArr, lookback) => {
+  if (highArr.length < lookback + 1) return 0;
   
-  const currentHigh = highArray[highArray.length - 1];
+  const currentHigh = highArr[highArr.length - 1];
   let count = 0;
   let maxHighSoFar = -Infinity;
   
   for (let i = 1; i <= lookback; i++) {
-    const idx = highArray.length - 1 - i;
+    const idx = highArr.length - 1 - i;
     if (idx < 0) break;
-    const prevHigh = highArray[idx];
+    const prevHigh = highArr[idx];
     
     if (prevHigh > maxHighSoFar && currentHigh > prevHigh) {
       count++;
@@ -224,11 +224,12 @@ onTick = (length, _moment, _, ta, inputs) => {
   const sma35Color = close > sma35 ? inputs.sma35LightGreen : inputs.sma35LightRed;
   const sma150Color = close > sma150 ? inputs.sma150DarkGreen : inputs.sma150DarkRed;
   
-  // Time filter
-  const currentDate = new Date(current_time);
-  const currentHour = currentDate.getUTCHours();
+  // Time filter - calculate hour from timestamp manually
+  const msPerHour = 3600000;
+  const msPerDay = 86400000;
+  const hourOfDay = Math.floor((current_time % msPerDay) / msPerHour);
   const isInExcludedTime = inputs.useTimeFilter ? 
-    (currentHour >= inputs.excludeStartHour && currentHour < inputs.excludeEndHour) : false;
+    (hourOfDay >= inputs.excludeStartHour && hourOfDay < inputs.excludeEndHour) : false;
   
   // ══════════════════════════════════════════════════════════════════════════════
   // MULTI-SWEEP DETECTION
@@ -289,7 +290,7 @@ onTick = (length, _moment, _, ta, inputs) => {
       current_time + 14400000, // 4 hours in milliseconds
       bullBoxBot,
       {
-        backgroundColor: hexToRgba(boxColor, opacity),
+        backgroundColor: createRgbaWithOpacity(boxColor, opacity),
         color: boxColor,
         linewidth: borderWidth
       }
@@ -300,13 +301,13 @@ onTick = (length, _moment, _, ta, inputs) => {
     text(
       current_time,
       high_val,
-      pctText,
       {
         color: boxColor,
         backgroundColor: boxColor,
-        textColor: '#FFFFFF',
+        textColor: color.white,
         fontSize: 10
-      }
+      },
+      pctText
     );
     
     // Multi-sweep marker
@@ -315,13 +316,13 @@ onTick = (length, _moment, _, ta, inputs) => {
       text(
         current_time,
         bullBoxBot,
-        sweepText,
         {
           color: inputs.multiSweepBullColor,
           backgroundColor: inputs.multiSweepBullColor,
-          textColor: '#000000',
+          textColor: color.black,
           fontSize: 12
-        }
+        },
+        sweepText
       );
     }
     
@@ -332,40 +333,34 @@ onTick = (length, _moment, _, ta, inputs) => {
     const targetMultiplier = sma35 > sma150 ? 2.5 : 1.2;
     const targetPrice = entryPrice + (riskAmount * targetMultiplier);
     
-    // Draw entry line
-    trendline(
-      current_time,
-      entryPrice,
-      current_time + 57600000, // 16 hours ahead
-      entryPrice,
+    // Draw entry line (green)
+    trendLine(
+      newPoint(current_time, entryPrice),
+      newPoint(current_time + 57600000, entryPrice), // 16 hours ahead
       {
-        color: '#00FF00',
+        linecolor: color.lime,
         linewidth: 1,
         linestyle: 1 // dashed
       }
     );
     
-    // Draw stop loss line
-    trendline(
-      current_time,
-      stopLoss,
-      current_time + 57600000,
-      stopLoss,
+    // Draw stop loss line (red)
+    trendLine(
+      newPoint(current_time, stopLoss),
+      newPoint(current_time + 57600000, stopLoss),
       {
-        color: '#FF0000',
+        linecolor: color.red,
         linewidth: 1,
         linestyle: 1
       }
     );
     
-    // Draw target line
-    trendline(
-      current_time,
-      targetPrice,
-      current_time + 57600000,
-      targetPrice,
+    // Draw target line (yellow)
+    trendLine(
+      newPoint(current_time, targetPrice),
+      newPoint(current_time + 57600000, targetPrice),
       {
-        color: '#FFD700',
+        linecolor: color.yellow,
         linewidth: 1,
         linestyle: 1
       }
@@ -390,7 +385,7 @@ onTick = (length, _moment, _, ta, inputs) => {
       current_time + 14400000, // 4 hours
       bearBoxBot,
       {
-        backgroundColor: hexToRgba(boxColor, opacity),
+        backgroundColor: createRgbaWithOpacity(boxColor, opacity),
         color: boxColor,
         linewidth: borderWidth
       }
@@ -401,13 +396,13 @@ onTick = (length, _moment, _, ta, inputs) => {
     text(
       current_time,
       low_val,
-      pctText,
       {
         color: boxColor,
         backgroundColor: boxColor,
-        textColor: '#FFFFFF',
+        textColor: color.white,
         fontSize: 10
-      }
+      },
+      pctText
     );
     
     // Multi-sweep marker
@@ -416,13 +411,13 @@ onTick = (length, _moment, _, ta, inputs) => {
       text(
         current_time,
         bearBoxTop,
-        sweepText,
         {
           color: inputs.multiSweepBearColor,
           backgroundColor: inputs.multiSweepBearColor,
-          textColor: '#000000',
+          textColor: color.black,
           fontSize: 12
-        }
+        },
+        sweepText
       );
     }
     
@@ -433,40 +428,34 @@ onTick = (length, _moment, _, ta, inputs) => {
     const targetMultiplier = sma35 < sma150 ? 2.5 : 1.2;
     const targetPrice = entryPrice - (riskAmount * targetMultiplier);
     
-    // Draw entry line
-    trendline(
-      current_time,
-      entryPrice,
-      current_time + 57600000, // 16 hours ahead
-      entryPrice,
+    // Draw entry line (red)
+    trendLine(
+      newPoint(current_time, entryPrice),
+      newPoint(current_time + 57600000, entryPrice), // 16 hours ahead
       {
-        color: '#FF0000',
+        linecolor: color.red,
         linewidth: 1,
         linestyle: 1
       }
     );
     
-    // Draw stop loss line
-    trendline(
-      current_time,
-      stopLoss,
-      current_time + 57600000,
-      stopLoss,
+    // Draw stop loss line (green)
+    trendLine(
+      newPoint(current_time, stopLoss),
+      newPoint(current_time + 57600000, stopLoss),
       {
-        color: '#00FF00',
+        linecolor: color.lime,
         linewidth: 1,
         linestyle: 1
       }
     );
     
-    // Draw target line
-    trendline(
-      current_time,
-      targetPrice,
-      current_time + 57600000,
-      targetPrice,
+    // Draw target line (yellow)
+    trendLine(
+      newPoint(current_time, targetPrice),
+      newPoint(current_time + 57600000, targetPrice),
       {
-        color: '#FFD700',
+        linecolor: color.yellow,
         linewidth: 1,
         linestyle: 1
       }
@@ -485,15 +474,31 @@ onTick = (length, _moment, _, ta, inputs) => {
 // UTILITY FUNCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Convert hex color to rgba
-const hexToRgba = (hex, alpha) => {
-  // Remove # if present
-  hex = hex.replace('#', '');
+// Map BaseColors to RGBA with custom alpha
+const createRgbaWithOpacity = (baseColor, alpha) => {
+  // Map common BaseColors to their RGB values
+  const colorMap = {
+    'lime': { r: 0, g: 255, b: 0 },
+    'red': { r: 255, g: 0, b: 0 },
+    'yellow': { r: 255, g: 255, b: 0 },
+    'fuchsia': { r: 255, g: 0, b: 255 },
+    'green': { r: 0, g: 128, b: 0 },
+    'maroon': { r: 128, g: 0, b: 0 }
+  };
   
-  // Parse hex values
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
+  // If baseColor is already an object with r, g, b
+  if (typeof baseColor === 'object' && 'r' in baseColor) {
+    return color.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
+  }
   
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  // Try to match string representation
+  const colorStr = String(baseColor).toLowerCase();
+  for (const [name, rgb] of Object.entries(colorMap)) {
+    if (colorStr.includes(name)) {
+      return color.rgba(rgb.r, rgb.g, rgb.b, alpha);
+    }
+  }
+  
+  // Default fallback
+  return color.rgba(0, 255, 0, alpha);
 };

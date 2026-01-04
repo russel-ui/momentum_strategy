@@ -8,8 +8,8 @@ init = () => {
   // Basic parameters
   input.int('SMA Period', 35, 'smaPeriod');
   input.float('Close Threshold', 0.6, 'closeThreshold');
-  input.color('Bullish Color', '#00FF00', 'bullishColor');
-  input.color('Bearish Color', '#FF0000', 'bearishColor');
+  input.color('Bullish Color', color.lime, 'bullishColor');
+  input.color('Bearish Color', color.red, 'bearishColor');
 };
 
 // Store price history
@@ -74,7 +74,7 @@ onTick = (length, _moment, _, ta, inputs) => {
       current_time + 14400000, // 4 hours
       low_val - (candleRange * 0.5),
       {
-        backgroundColor: 'rgba(0, 255, 0, 0.2)',
+        backgroundColor: color.rgba(0, 255, 0, 0.2),
         color: inputs.bullishColor,
         linewidth: 2
       }
@@ -85,12 +85,12 @@ onTick = (length, _moment, _, ta, inputs) => {
     text(
       current_time,
       high_val,
-      pctText,
       {
         color: inputs.bullishColor,
-        textColor: '#FFFFFF',
+        textColor: color.white,
         fontSize: 12
-      }
+      },
+      pctText
     );
     
     // Draw entry and stop levels
@@ -99,25 +99,37 @@ onTick = (length, _moment, _, ta, inputs) => {
     const targetPrice = entryPrice + (entryPrice - stopPrice) * 2;
     
     // Entry line (green)
-    trendline(current_time, entryPrice, current_time + 28800000, entryPrice, {
-      color: '#00FF00',
-      linewidth: 1,
-      linestyle: 1
-    });
+    trendLine(
+      newPoint(current_time, entryPrice), 
+      newPoint(current_time + 28800000, entryPrice), 
+      {
+        linecolor: color.lime,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
     
     // Stop line (red)
-    trendline(current_time, stopPrice, current_time + 28800000, stopPrice, {
-      color: '#FF0000',
-      linewidth: 1,
-      linestyle: 1
-    });
+    trendLine(
+      newPoint(current_time, stopPrice), 
+      newPoint(current_time + 28800000, stopPrice), 
+      {
+        linecolor: color.red,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
     
-    // Target line (gold)
-    trendline(current_time, targetPrice, current_time + 28800000, targetPrice, {
-      color: '#FFD700',
-      linewidth: 1,
-      linestyle: 1
-    });
+    // Target line (yellow)
+    trendLine(
+      newPoint(current_time, targetPrice), 
+      newPoint(current_time + 28800000, targetPrice), 
+      {
+        linecolor: color.yellow,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
   }
   
   // ═══════════════════════════════════════════════════════════════
@@ -137,7 +149,7 @@ onTick = (length, _moment, _, ta, inputs) => {
       current_time + 14400000,
       high_val,
       {
-        backgroundColor: 'rgba(255, 0, 0, 0.2)',
+        backgroundColor: color.rgba(255, 0, 0, 0.2),
         color: inputs.bearishColor,
         linewidth: 2
       }
@@ -148,12 +160,12 @@ onTick = (length, _moment, _, ta, inputs) => {
     text(
       current_time,
       low_val,
-      pctText,
       {
         color: inputs.bearishColor,
-        textColor: '#FFFFFF',
+        textColor: color.white,
         fontSize: 12
-      }
+      },
+      pctText
     );
     
     // Draw entry and stop levels
@@ -162,30 +174,42 @@ onTick = (length, _moment, _, ta, inputs) => {
     const targetPrice = entryPrice - (stopPrice - entryPrice) * 2;
     
     // Entry line (red)
-    trendline(current_time, entryPrice, current_time + 28800000, entryPrice, {
-      color: '#FF0000',
-      linewidth: 1,
-      linestyle: 1
-    });
+    trendLine(
+      newPoint(current_time, entryPrice), 
+      newPoint(current_time + 28800000, entryPrice), 
+      {
+        linecolor: color.red,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
     
     // Stop line (green)
-    trendline(current_time, stopPrice, current_time + 28800000, stopPrice, {
-      color: '#00FF00',
-      linewidth: 1,
-      linestyle: 1
-    });
+    trendLine(
+      newPoint(current_time, stopPrice), 
+      newPoint(current_time + 28800000, stopPrice), 
+      {
+        linecolor: color.lime,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
     
-    // Target line (gold)
-    trendline(current_time, targetPrice, current_time + 28800000, targetPrice, {
-      color: '#FFD700',
-      linewidth: 1,
-      linestyle: 1
-    });
+    // Target line (yellow)
+    trendLine(
+      newPoint(current_time, targetPrice), 
+      newPoint(current_time + 28800000, targetPrice), 
+      {
+        linecolor: color.yellow,
+        linewidth: 1,
+        linestyle: 1
+      }
+    );
   }
   
   // ═══════════════════════════════════════════════════════════════
   // PLOT SMA
   // ═══════════════════════════════════════════════════════════════
-  const smaColor = close > sma ? '#00FF00' : '#FF0000';
+  const smaColor = close > sma ? color.lime : color.red;
   plot.line('SMA', sma, smaColor, 0);
 };

@@ -80,18 +80,20 @@ onTick = (length, _moment, _, ta, inputs) => {
       }
     );
     
-    // Add label
-    const pctText = Math.round(closePosition * 100) + '% ▲';
-    Text(
+    // Add label using priceLabel
+    const pctText = Math.round(closePosition * 100) + '%';
+    priceLabel(
       current_time,
       high_val,
+      pctText,
       {
         color: inputs.bullishColor,
-        textColor: color.white,
-        fontSize: 12
-      },
-      pctText
+        textColor: color.white
+      }
     );
+    
+    // Add arrow marker
+    arrowUp(current_time, high_val, { color: inputs.bullishColor });
     
     // Draw entry and stop levels
     const entryPrice = close;
@@ -155,18 +157,20 @@ onTick = (length, _moment, _, ta, inputs) => {
       }
     );
     
-    // Add label
-    const pctText = Math.round((1 - closePosition) * 100) + '% ▼';
-    Text(
+    // Add label using priceLabel
+    const pctText = Math.round((1 - closePosition) * 100) + '%';
+    priceLabel(
       current_time,
       low_val,
+      pctText,
       {
         color: inputs.bearishColor,
-        textColor: color.white,
-        fontSize: 12
-      },
-      pctText
+        textColor: color.white
+      }
     );
+    
+    // Add arrow marker
+    arrowDown(current_time, low_val, { color: inputs.bearishColor });
     
     // Draw entry and stop levels
     const entryPrice = close;

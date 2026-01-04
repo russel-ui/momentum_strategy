@@ -296,33 +296,27 @@ onTick = (length, _moment, _, ta, inputs) => {
       }
     );
     
-    // Add label showing percentage
+    // Add label showing percentage using priceLabel
     const pctText = Math.round(bullishPercent) + '%';
-    Text(
+    priceLabel(
       current_time,
       high_val,
+      pctText,
       {
         color: boxColor,
         backgroundColor: boxColor,
-        textColor: color.white,
-        fontSize: 10
-      },
-      pctText
+        textColor: color.white
+      }
     );
     
-    // Multi-sweep marker
+    // Multi-sweep marker using arrow
     if (bullishMultiSweep) {
-      const sweepText = '★ ' + lowsSwept + ' lows';
-      Text(
+      arrowUp(
         current_time,
         bullBoxBot,
         {
-          color: inputs.multiSweepBullColor,
-          backgroundColor: inputs.multiSweepBullColor,
-          textColor: color.black,
-          fontSize: 12
-        },
-        sweepText
+          color: inputs.multiSweepBullColor
+        }
       );
     }
     
@@ -391,33 +385,27 @@ onTick = (length, _moment, _, ta, inputs) => {
       }
     );
     
-    // Add label showing percentage
+    // Add label showing percentage using priceLabel
     const pctText = Math.round(bearishPercent) + '%';
-    Text(
+    priceLabel(
       current_time,
       low_val,
+      pctText,
       {
         color: boxColor,
         backgroundColor: boxColor,
-        textColor: color.white,
-        fontSize: 10
-      },
-      pctText
+        textColor: color.white
+      }
     );
     
-    // Multi-sweep marker
+    // Multi-sweep marker using arrow
     if (bearishMultiSweep) {
-      const sweepText = '★ ' + highsSwept + ' highs';
-      Text(
+      arrowDown(
         current_time,
         bearBoxTop,
         {
-          color: inputs.multiSweepBearColor,
-          backgroundColor: inputs.multiSweepBearColor,
-          textColor: color.black,
-          fontSize: 12
-        },
-        sweepText
+          color: inputs.multiSweepBearColor
+        }
       );
     }
     

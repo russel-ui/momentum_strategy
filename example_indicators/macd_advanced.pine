@@ -1,0 +1,91 @@
+//@version=5
+indicator("MACD with Histogram", shorttitle="MACD", overlay=false)
+
+// ============================================
+// DESCRIPTION
+// ============================================
+// Moving Average Convergence Divergence (MACD) indicator with histogram
+// and signal line. A classic momentum indicator for FxReplay trading.
+// ============================================
+
+// ============================================
+// USER INPUTS
+// ============================================
+fastLength = input.int(12, "Fast Length", minval=1)
+slowLength = input.int(26, "Slow Length", minval=1)
+signalLength = input.int(9, "Signal Length", minval=1)
+source = input.source(close, "Source")
+
+// Appearance
+showHistogram = input.bool(true, "Show Histogram")
+showZeroLine = input.bool(true, "Show Zero Line")
+
+// ============================================
+// CALCULATIONS
+// ============================================
+// Calculate MACD
+fastMA = ta.ema(source, fastLength)
+slowMA = ta.ema(source, slowLength)
+macd = fastMA - slowMA
+signal = ta.ema(macd, signalLength)
+histogram = macd - signal
+
+// Detect crossovers
+bullishCross = ta.crossover(macd, signal)
+bearishCross = ta.crossunder(macd, signal)
+
+// Detect divergence (simplified)
+macdIncreasing = macd > macd[1] and macd[1] > macd[2]
+macdDecreasing = macd < macd[1] and macd[1] < macd[2]
+
+// ============================================
+// PLOTTING
+// ============================================
+// Plot MACD and Signal lines
+plot(macd, "MACD", color=color.new(color.blue, 0), linewidth=2)
+plot(signal, "Signal", color=color.new(color.orange, 0), linewidth=2)
+
+// Plot histogram
+histogramColor = histogram >= 0 ? 
+                 (histogram >= histogram[1] ? color.new(color.green, 0) : color.new(color.green, 50)) :
+                 (histogram <= histogram[1] ? color.new(color.red, 0) : color.new(color.red, 50))
+
+plot(showHistogram ? histogram : na, "Histogram", color=histogramColor, style=plot.style_columns, linewidth=4)
+
+// Plot zero line
+hline(showZeroLine ? 0 : na, "Zero Line", color=color.gray, linestyle=hline.style_solid, linewidth=1)
+
+// Plot crossover signals
+plotshape(bullishCross, "Bullish Cross", shape.triangleup, location.bottom, color=color.new(color.green, 0), size=size.tiny)
+plotshape(bearishCross, "Bearish Cross", shape.triangledown, location.top, color=color.new(color.red, 0), size=size.tiny)
+
+// Background color for overall trend
+bgcolor(macd > signal ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend Background")
+
+// ============================================
+// INFORMATION DISPLAY
+// ============================================
+// Show current values
+var table statsTable = table.new(position.top_right, 2, 4, border_width=1)
+
+if barstate.islast
+    table.cell(statsTable, 0, 0, "MACD:", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(statsTable, 1, 0, str.tostring(macd, "#.####"), text_color=color.white, bgcolor=color.new(color.blue, 30))
+    
+    table.cell(statsTable, 0, 1, "Signal:", text_color=color.white, bgcolor=color.new(color.orange, 30))
+    table.cell(statsTable, 1, 1, str.tostring(signal, "#.####"), text_color=color.white, bgcolor=color.new(color.orange, 30))
+    
+    table.cell(statsTable, 0, 2, "Hist:", text_color=color.white, bgcolor=color.new(color.gray, 30))
+    table.cell(statsTable, 1, 2, str.tostring(histogram, "#.####"), text_color=color.white, bgcolor=color.new(color.gray, 30))
+    
+    table.cell(statsTable, 0, 3, "Trend:", text_color=color.white, bgcolor=color.new(color.gray, 30))
+    trendText = macd > signal ? "BULLISH" : "BEARISH"
+    trendColor = macd > signal ? color.green : color.red
+    table.cell(statsTable, 1, 3, trendText, text_color=color.white, bgcolor=trendColor)
+
+// ============================================
+// ALERTS
+// ============================================
+alertcondition(bullishCross, "MACD Bullish Cross", "MACD crossed above signal line!")
+alertcondition(bearishCross, "MACD Bearish Cross", "MACD crossed below signal line!")
+alertcondition(ta.cross(macd, 0), "MACD Zero Cross", "MACD crossed the zero line!")

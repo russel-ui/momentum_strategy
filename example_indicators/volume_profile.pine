@@ -1,0 +1,82 @@
+//@version=5
+indicator("Simple Volume Analysis", shorttitle="Volume", overlay=false)
+
+// ============================================
+// DESCRIPTION
+// ============================================
+// Volume analysis indicator that highlights significant volume spikes
+// and shows volume moving average for context. Helps identify strong
+// price moves during FxReplay sessions.
+// ============================================
+
+// ============================================
+// USER INPUTS
+// ============================================
+volumeMALength = input.int(20, "Volume MA Length", minval=1)
+spikeMultiplier = input.float(2.0, "Spike Multiplier", minval=1.0, step=0.1, tooltip="Volume spike threshold as multiple of average")
+showMA = input.bool(true, "Show Volume MA")
+
+// ============================================
+// CALCULATIONS
+// ============================================
+// Calculate volume moving average
+volumeMA = ta.sma(volume, volumeMALength)
+
+// Identify volume spikes
+isVolumeSpike = volume > volumeMA * spikeMultiplier
+
+// Volume trend
+volumeIncreasing = volume > volume[1]
+volumeAboveAverage = volume > volumeMA
+
+// Combine with price action
+priceUp = close > close[1]
+priceDown = close < close[1]
+
+// Classify volume bars
+bullishVolume = volumeAboveAverage and priceUp
+bearishVolume = volumeAboveAverage and priceDown
+neutralVolume = not volumeAboveAverage
+
+// ============================================
+// PLOTTING
+// ============================================
+// Color code volume bars based on conditions
+volumeColor = isVolumeSpike ? color.yellow : 
+              bullishVolume ? color.green : 
+              bearishVolume ? color.red : 
+              color.gray
+
+// Plot volume bars
+plot(volume, "Volume", color=volumeColor, style=plot.style_columns, linewidth=2)
+
+// Plot volume MA if enabled
+plot(showMA ? volumeMA : na, "Volume MA", color=color.new(color.blue, 0), linewidth=2)
+
+// Highlight high volume zones
+bgcolor(isVolumeSpike ? color.new(color.yellow, 85) : na, title="Volume Spike")
+
+// ============================================
+// TABLE (Optional Info Display)
+// ============================================
+// Create a small table to show current volume status
+var table infoTable = table.new(position.top_right, 2, 3, border_width=1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Current Vol:", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(infoTable, 1, 0, str.tostring(volume, "#,###"), text_color=color.white, bgcolor=color.new(color.gray, 50))
+    
+    table.cell(infoTable, 0, 1, "Avg Vol:", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(infoTable, 1, 1, str.tostring(volumeMA, "#,###"), text_color=color.white, bgcolor=color.new(color.gray, 50))
+    
+    table.cell(infoTable, 0, 2, "Status:", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    statusText = isVolumeSpike ? "SPIKE!" : volumeAboveAverage ? "Above Avg" : "Below Avg"
+    statusColor = isVolumeSpike ? color.yellow : volumeAboveAverage ? color.green : color.gray
+    table.cell(infoTable, 1, 2, statusText, text_color=color.black, bgcolor=statusColor)
+
+// ============================================
+// ALERTS
+// ============================================
+alertcondition(isVolumeSpike, "Volume Spike", "Significant volume spike detected!")
+alertcondition(bullishVolume and isVolumeSpike, "Bullish Volume Spike", "High volume bullish bar!")
+alertcondition(bearishVolume and isVolumeSpike, "Bearish Volume Spike", "High volume bearish bar!")

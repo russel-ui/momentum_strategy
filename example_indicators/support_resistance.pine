@@ -1,0 +1,88 @@
+//@version=5
+indicator("Dynamic Support and Resistance", shorttitle="S/R Levels", overlay=true)
+
+// ============================================
+// DESCRIPTION
+// ============================================
+// Automatically identifies and plots dynamic support and resistance
+// levels based on recent price action. Useful for FxReplay to identify
+// key price levels during backtesting.
+// ============================================
+
+// ============================================
+// USER INPUTS
+// ============================================
+lookbackLength = input.int(50, "Lookback Period", minval=10, maxval=500, tooltip="Number of bars to look back for S/R levels")
+pivotStrength = input.int(5, "Pivot Strength", minval=1, maxval=20, tooltip="Number of bars on each side for pivot detection")
+showLabels = input.bool(true, "Show Labels", tooltip="Display S/R labels on chart")
+maxLevels = input.int(3, "Maximum Levels to Show", minval=1, maxval=10, tooltip="Maximum number of S/R levels to display")
+
+// Colors
+supportColor = input.color(color.new(color.green, 50), "Support Color")
+resistanceColor = input.color(color.new(color.red, 50), "Resistance Color")
+
+// ============================================
+// CALCULATIONS
+// ============================================
+// Detect pivot highs and lows
+pivotHigh = ta.pivothigh(high, pivotStrength, pivotStrength)
+pivotLow = ta.pivotlow(low, pivotStrength, pivotStrength)
+
+// Variables to store support and resistance levels
+var float resistance1 = na
+var float resistance2 = na
+var float resistance3 = na
+var float support1 = na
+var float support2 = na
+var float support3 = na
+
+// Update resistance levels
+if not na(pivotHigh)
+    resistance3 := resistance2
+    resistance2 := resistance1
+    resistance1 := pivotHigh
+
+// Update support levels
+if not na(pivotLow)
+    support3 := support2
+    support2 := support1
+    support1 := pivotLow
+
+// ============================================
+// PLOTTING
+// ============================================
+// Plot resistance levels
+plot(resistance1, "Resistance 1", color=resistanceColor, linewidth=2, style=plot.style_linebr)
+plot(resistance2, "Resistance 2", color=resistanceColor, linewidth=1, style=plot.style_linebr)
+plot(resistance3, "Resistance 3", color=resistanceColor, linewidth=1, style=plot.style_linebr)
+
+// Plot support levels
+plot(support1, "Support 1", color=supportColor, linewidth=2, style=plot.style_linebr)
+plot(support2, "Support 2", color=supportColor, linewidth=1, style=plot.style_linebr)
+plot(support3, "Support 3", color=supportColor, linewidth=1, style=plot.style_linebr)
+
+// Highlight price zones
+var float upperZone = na
+var float lowerZone = na
+
+upperZone := not na(resistance1) ? resistance1 : upperZone
+lowerZone := not na(support1) ? support1 : lowerZone
+
+// ============================================
+// LABELS (Optional)
+// ============================================
+// Add text labels if enabled
+if showLabels and not na(resistance1) and ta.change(resistance1)
+    label.new(bar_index, resistance1, "R", color=color.red, textcolor=color.white, style=label.style_label_down, size=size.tiny)
+
+if showLabels and not na(support1) and ta.change(support1)
+    label.new(bar_index, support1, "S", color=color.green, textcolor=color.white, style=label.style_label_up, size=size.tiny)
+
+// ============================================
+// ALERTS
+// ============================================
+priceNearResistance = close >= resistance1 * 0.998 and close <= resistance1 * 1.002
+priceNearSupport = close <= support1 * 1.002 and close >= support1 * 0.998
+
+alertcondition(priceNearResistance, "Price Near Resistance", "Price is approaching resistance level!")
+alertcondition(priceNearSupport, "Price Near Support", "Price is approaching support level!")

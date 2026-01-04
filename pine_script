@@ -1,1 +1,95 @@
+//@version=5
+indicator("Custom EMA Crossover with Alerts", shorttitle="EMA Cross", overlay=true)
 
+// ============================================
+// DESCRIPTION
+// ============================================
+// This indicator shows two Exponential Moving Averages (EMAs) and 
+// generates buy/sell signals when they cross. Perfect for FxReplay
+// to identify potential entry and exit points during replay sessions.
+//
+// Author: Your Name
+// Version: 1.0
+// Date: January 4, 2026
+// ============================================
+
+// ============================================
+// USER INPUTS
+// ============================================
+fastLength = input.int(9, "Fast EMA Length", minval=1, maxval=200, tooltip="Period for the fast moving average")
+slowLength = input.int(21, "Slow EMA Length", minval=1, maxval=200, tooltip="Period for the slow moving average")
+showSignals = input.bool(true, "Show Buy/Sell Signals", tooltip="Display crossover signals on chart")
+showFillArea = input.bool(true, "Show Fill Between EMAs", tooltip="Shade the area between the two EMAs")
+
+// Color inputs
+fastColor = input.color(color.new(color.blue, 0), "Fast EMA Color")
+slowColor = input.color(color.new(color.red, 0), "Slow EMA Color")
+bullishColor = input.color(color.new(color.green, 80), "Bullish Fill Color")
+bearishColor = input.color(color.new(color.red, 80), "Bearish Fill Color")
+
+// ============================================
+// CALCULATIONS
+// ============================================
+// Calculate EMAs
+fastEMA = ta.ema(close, fastLength)
+slowEMA = ta.ema(close, slowLength)
+
+// Detect crossovers
+bullishCross = ta.crossover(fastEMA, slowEMA)  // Fast crosses above slow
+bearishCross = ta.crossunder(fastEMA, slowEMA) // Fast crosses below slow
+
+// Determine trend direction
+isBullish = fastEMA > slowEMA
+isBearish = fastEMA < slowEMA
+
+// ============================================
+// PLOTTING
+// ============================================
+// Plot EMAs
+plot(fastEMA, "Fast EMA", color=fastColor, linewidth=2)
+plot(slowEMA, "Slow EMA", color=slowColor, linewidth=2)
+
+// Fill area between EMAs
+fillColor = isBullish ? bullishColor : bearishColor
+fill(plot(fastEMA), plot(slowEMA), color=showFillArea ? fillColor : na, title="EMA Fill")
+
+// Plot buy/sell signals
+plotshape(
+    showSignals and bullishCross, 
+    "Buy Signal", 
+    shape.triangleup, 
+    location.belowbar, 
+    color=color.new(color.green, 0), 
+    size=size.small,
+    text="BUY"
+)
+
+plotshape(
+    showSignals and bearishCross, 
+    "Sell Signal", 
+    shape.triangledown, 
+    location.abovebar, 
+    color=color.new(color.red, 0), 
+    size=size.small,
+    text="SELL"
+)
+
+// Optional: Add background color to highlight trend
+bgcolor(isBullish ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend Background")
+
+// ============================================
+// ALERTS
+// ============================================
+// These alerts can be used if FxReplay supports alert functionality
+alertcondition(bullishCross, title="Bullish Crossover", message="Fast EMA crossed above Slow EMA - Potential BUY signal!")
+alertcondition(bearishCross, title="Bearish Crossover", message="Fast EMA crossed below Slow EMA - Potential SELL signal!")
+
+// ============================================
+// ADDITIONAL INFORMATION
+// ============================================
+// This indicator can be customized further by:
+// 1. Adding more EMAs for additional confirmation
+// 2. Incorporating volume analysis
+// 3. Adding support/resistance levels
+// 4. Including risk management zones
+// ============================================

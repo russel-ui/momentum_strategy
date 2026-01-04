@@ -1,0 +1,58 @@
+//@version=5
+indicator("RSI with Overbought/Oversold Zones", shorttitle="RSI", overlay=false)
+
+// ============================================
+// DESCRIPTION
+// ============================================
+// Classic Relative Strength Index (RSI) indicator with customizable
+// overbought and oversold levels. Perfect for identifying potential
+// reversal points during FxReplay sessions.
+// ============================================
+
+// ============================================
+// USER INPUTS
+// ============================================
+rsiLength = input.int(14, "RSI Length", minval=1)
+rsiSource = input.source(close, "Source")
+overboughtLevel = input.int(70, "Overbought Level", minval=50, maxval=100)
+oversoldLevel = input.int(30, "Oversold Level", minval=0, maxval=50)
+
+// ============================================
+// CALCULATIONS
+// ============================================
+rsiValue = ta.rsi(rsiSource, rsiLength)
+
+// Detect overbought and oversold conditions
+isOverbought = rsiValue >= overboughtLevel
+isOversold = rsiValue <= oversoldLevel
+
+// Detect when RSI crosses back from extreme levels
+exitOverbought = ta.crossunder(rsiValue, overboughtLevel)
+exitOversold = ta.crossover(rsiValue, oversoldLevel)
+
+// ============================================
+// PLOTTING
+// ============================================
+// Plot RSI line
+plot(rsiValue, "RSI", color=color.new(color.blue, 0), linewidth=2)
+
+// Plot horizontal levels
+hline(overboughtLevel, "Overbought", color=color.red, linestyle=hline.style_dashed, linewidth=1)
+hline(oversoldLevel, "Oversold", color=color.green, linestyle=hline.style_dashed, linewidth=1)
+hline(50, "Midline", color=color.gray, linestyle=hline.style_dotted, linewidth=1)
+
+// Color background for extreme zones
+bgcolor(isOverbought ? color.new(color.red, 90) : na, title="Overbought Zone")
+bgcolor(isOversold ? color.new(color.green, 90) : na, title="Oversold Zone")
+
+// Plot signals
+plotshape(exitOversold, "Buy Signal", shape.triangleup, location.bottom, color=color.new(color.green, 0), size=size.tiny)
+plotshape(exitOverbought, "Sell Signal", shape.triangledown, location.top, color=color.new(color.red, 0), size=size.tiny)
+
+// ============================================
+// ALERTS
+// ============================================
+alertcondition(isOverbought, "RSI Overbought", "RSI entered overbought territory!")
+alertcondition(isOversold, "RSI Oversold", "RSI entered oversold territory!")
+alertcondition(exitOverbought, "RSI Exit Overbought", "RSI exited overbought zone - potential sell signal!")
+alertcondition(exitOversold, "RSI Exit Oversold", "RSI exited oversold zone - potential buy signal!")
